@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Reader</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page {
+            background: white;
+            padding: 40px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            min-height: 500px;
+        }
+
+        .block {
+            margin-bottom: 10px;
+            line-height: 1.6;
+            transition: all 0.2s;
+        }
+
+        .token {
+            cursor: pointer;
+            padding: 0 1px;
+            border-radius: 2px;
+            display: inline-block;
+            /* Animation Bases */
+            background-repeat: no-repeat;
+            background-position: left bottom;
+            transition: background-size 0.4s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.2s;
+
+            /* Marker feel - ensures text remains readable and looks 'inked' */
+            mix-blend-mode: multiply;
+        }
+
+        .token:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+            /* Subtle hover instead of full gray */
+        }
+
+        .token.selected {
+            background-color: #b3d4fc !important;
+        }
+
+        #highlight-menu {
+            position: absolute;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 1000;
+            width: 250px;
+            border: 1px solid #eee;
+        }
+
+        .menu-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .menu-label {
+            font-size: 0.75em;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .menu-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .color-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            box-shadow: 0 0 0 1px #ddd;
+            transition: transform 0.1s;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.1);
+        }
+
+        button.tool-btn {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.1s;
+        }
+
+        button.tool-btn:hover {
+            background: #e9ecef;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1 id="docTitle">Loading...</h1>
+            <span id="pageCount"></span>
+        </header>
+
+        <div id="pages"></div>
+    </div>
+
+    <!-- Enhanced Menu -->
+    <div id="highlight-menu" class="hidden">
+        <!-- Colors -->
+        <div class="menu-section">
+            <span class="menu-label">Highlight Color</span>
+            <div class="menu-row">
+                <div class="color-btn" style="background: #ffeb3b;" onclick="createHighlight('#ffeb3b')"></div>
+                <div class="color-btn" style="background: #a5d6a7;" onclick="createHighlight('#a5d6a7')"></div>
+                <div class="color-btn" style="background: #ffcc80;" onclick="createHighlight('#ffcc80')"></div>
+                <div class="color-btn" style="background: #90caf9;" onclick="createHighlight('#90caf9')"></div>
+                <div class="color-btn" style="background: #ef9a9a;" onclick="createHighlight('#ef9a9a')"></div>
+            </div>
+        </div>
+
+        <!-- Typography -->
+        <div class="menu-section">
+            <span class="menu-label">Typography</span>
+            <div class="menu-row">
+                <button class="tool-btn font-style-btn" data-style="bold"><strong>B</strong></button>
+                <button class="tool-btn font-style-btn" data-style="italic"><em>I</em></button>
+                <button class="tool-btn font-style-btn" data-style="underline"><u>U</u></button>
+            </div>
+            <div class="menu-row" style="margin-top: 5px;">
+                <button class="tool-btn font-size-btn" data-size="0.8em">Small</button>
+                <button class="tool-btn font-size-btn" data-size="1em">Normal</button>
+                <button class="tool-btn font-size-btn" data-size="1.2em">Large</button>
+                <button class="tool-btn font-size-btn" data-size="1.5em">XL</button>
+            </div>
+        </div>
+
+        <!-- Notes & Actions -->
+        <div class="menu-section">
+            <span class="menu-label">Note</span>
+            <textarea id="annotation-note" rows="3" placeholder="Add a note..."
+                style="width: 100%; border: 1px solid #ddd; border-radius: 4px; padding: 5px; font-family: inherit; font-size: 0.9em; resize: vertical;"></textarea>
+            <div class="menu-row" style="justify-content: space-between; margin-top: 5px;">
+                <button id="btn-delete" class="tool-btn"
+                    style="color: #dc3545; border-color: #dc3545;">Unhighlight</button>
+                <button id="btn-save" class="tool-btn" style="color: #28a745; border-color: #28a745;">Save Note</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/reader.js"></script>
+</body>
+
+</html>

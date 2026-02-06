@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Reader Backend - Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 50px;
+            font-size: 2.5em;
+        }
+
+        .architecture {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .layer {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .layer-title {
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .component {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .component h3 {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .component p {
+            font-size: 0.9em;
+            line-height: 1.6;
+            opacity: 0.95;
+        }
+
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .flow-item {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        .arrow {
+            font-size: 2em;
+            color: #667eea;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        .json-structure {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-icon {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 30px 0;
+        }
+
+        .stat {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 200px;
+        }
+
+        .stat-number {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>📚 PDF Reader Backend Architecture</h1>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">5</div>
+                <div class="stat-label">API Endpoints</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">3</div>
+                <div class="stat-label">Core Modules</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">50MB</div>
+                <div class="stat-label">Max Upload Size</div>
+            </div>
+        </div>
+
+        <!-- Live Demo Section -->
+        <div class="layer" style="border-left: 5px solid #667eea;">
+            <div class="layer-title">🚀 Try It Live</div>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <p>Upload a PDF to process it instantly and see the extracted JSON data.</p>
+            </div>
+
+            <div class="upload-area" id="uploadArea"
+                style="border: 2px dashed #ccc; padding: 40px; text-align: center; border-radius: 8px; cursor: pointer; transition: all 0.3s ease;">
+                <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                <div style="font-size: 3em; margin-bottom: 10px;">📤</div>
+                <h3>Click to Upload PDF</h3>
+                <p style="color: #666;">or drag and drop here</p>
+            </div>
+
+            <div id="loadingState" style="display: none; text-align: center; padding: 20px;">
+                <div style="font-size: 2em; animation: spin 1s linear infinite;">⚙️</div>
+                <p>Processing PDF... This may take a few seconds.</p>
+            </div>
+
+            <div id="resultArea" style="display: none; margin-top: 30px;">
+                <h3>🎉 Processing Complete!</h3>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <button id="openReaderBtn"
+                        style="background: #667eea; color: white; border: none; padding: 12px 24px; font-size: 1.1em; border-radius: 6px; cursor: pointer;">
+                        📖 Open Interactive Reader
+                    </button>
+                </div>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div style="flex: 1; padding: 15px; background: #f0f7ff; border-radius: 8px;">
+                        <strong>Document ID:</strong> <span id="docId"></span>
+                    </div>
+                    <div style="flex: 1; padding: 15px; background: #f0f7ff; border-radius: 8px;">
+                        <strong>Pages:</strong> <span id="docPages"></span>
+                    </div>
+                </div>
+
+                <h4>Raw JSON Response:</h4>
+                <div class="code-block" style="max-height: 500px; overflow-y: auto;">
+                    <pre><code id="jsonOutput"></code></pre>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const loadingState = document.getElementById('loadingState');
+            const resultArea = document.getElementById('resultArea');
+            const jsonOutput = document.getElementById('jsonOutput');
+
+            // Drag and drop handlers
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#667eea';
+                uploadArea.style.background = '#f8f9ff';
+            });
+
+            uploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.background = 'transparent';
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.background = 'transparent';
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    handleUpload(files[0]);
+                } else {
+                    alert('Please upload a PDF file');
+                }
+            });
+
+            // Click handler
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleUpload(e.target.files[0]);
+                }
+            });
+
+            async function handleUpload(file) {
+                // Show loading
+                uploadArea.style.display = 'none';
+                loadingState.style.display = 'block';
+                resultArea.style.display = 'none';
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    // 1. Upload
+                    const uploadRes = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!uploadRes.ok) {
+                        const errorData = await uploadRes.json();
+                        throw new Error(errorData.detail || 'Upload failed');
+                    }
+
+                    const uploadData = await uploadRes.json();
+
+                    // 2. Get full details
+                    const docRes = await fetch(`/api/documents/${uploadData.document_id}`);
+                    const docData = await docRes.json();
+
+                    // 3. Show results
+                    displayResults(docData);
+
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                    resetUI();
+                }
+            }
+
+            function displayResults(data) {
+                loadingState.style.display = 'none';
+                uploadArea.style.display = 'block';
+                resultArea.style.display = 'block';
+
+                document.getElementById('docId').textContent = data.id;
+                document.getElementById('docPages').textContent = data.total_pages;
+
+                // Update Reader Button
+                document.getElementById('openReaderBtn').onclick = () => {
+                    window.location.href = `/reader/${data.id}`;
+                };
+
+                jsonOutput.textContent = JSON.stringify(data, null, 2);
+            }
+
+            function resetUI() {
+                loadingState.style.display = 'none';
+                uploadArea.style.display = 'block';
+            }
+        </script>
+
+        <style>
+            @keyframes spin {
+                100% {
+                    transform: rotate(360deg);
+                }
+            }
+        </style>
+
+        <!-- Processing Flow -->
+        <div class="layer">
+            <div class="layer-title">🔄 Processing Flow</div>
+            <div class="flow">
+                <div class="flow-item">
+                    <strong>1. Upload</strong><br>
+                    User uploads PDF
+                </div>
+                <div class="arrow">→</div>
+                <div class="flow-item">
+                    <strong>2. Extract</strong><br>
+                    Text & Images
+                </div>
+                <div class="arrow">→</div>
+                <div class="flow-item">
+                    <strong>3. Process</strong><br>
+                    Structure Data
+                </div>
+                <div class="arrow">→</div>
+                <div class="flow-item">
+                    <strong>4. Store</strong><br>
+                    JSON & Files
+                </div>
+                <div class="arrow">→</div>
+                <div class="flow-item">
+                    <strong>5. Serve</strong><br>
+                    API Response
+                </div>
+            </div>
+        </div>
+
+        <!-- Components -->
+        <div class="layer">
+            <div class="layer-title">🧩 Core Components</div>
+            <div class="components">
+                <div class="component">
+                    <h3>main.py</h3>
+                    <p>FastAPI application with REST endpoints for uploading, retrieving, and managing PDF documents</p>
+                </div>
+                <div class="component">
+                    <h3>pdf_processor.py</h3>
+                    <p>PDF processing engine using pdfplumber for text and pypdf for image extraction</p>
+                </div>
+                <div class="component">
+                    <h3>config.py</h3>
+                    <p>Configuration settings for file sizes, paths, image quality, and server options</p>
+                </div>
+                <div class="component">
+                    <h3>index.html</h3>
+                    <p>Beautiful web interface for testing uploads and viewing extracted JSON data</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Endpoints -->
+        <div class="layer">
+            <div class="layer-title">🔌 API Endpoints</div>
+            <div class="code-block">
+                POST /api/upload → Upload & process PDF
+                GET /api/document/{document_id} → Get complete document
+                GET /api/page/{id}/{page_number} → Get single page
+                GET /api/documents → List all documents
+                DELETE /api/document/{document_id} → Delete document
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="layer">
+            <div class="layer-title">✨ Features</div>
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="feature-icon">📤</div>
+                    <strong>File Upload</strong><br>
+                    <small>Drag & drop or click to upload PDFs</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📝</div>
+                    <strong>Text Extraction</strong><br>
+                    <small>Extract text preserving layout & paragraphs</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🖼️</div>
+                    <strong>Image Extraction</strong><br>
+                    <small>Save embedded images as PNG/JPEG</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <strong>Metadata</strong><br>
+                    <small>Extract title, author, page count</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🎨</div>
+                    <strong>Beautiful UI</strong><br>
+                    <small>Modern web interface for testing</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <strong>Fast Processing</strong><br>
+                    <small>Async FastAPI for performance</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <strong>CORS Enabled</strong><br>
+                    <small>Ready for frontend integration</small>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">💾</div>
+                    <strong>File Storage</strong><br>
+                    <small>Organized folder structure</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- JSON Output Structure -->
+        <div class="layer">
+            <div class="layer-title">📄 JSON Output Structure</div>
+            <div class="json-structure">
+                <strong>Complete document data including:</strong>
+                <ul style="margin-top: 10px; line-height: 2;">
+                    <li><strong>document_id</strong> - Unique identifier</li>
+                    <li><strong>filename</strong> - Original PDF name</li>
+                    <li><strong>metadata</strong> - Title, author, page count, etc.</li>
+                    <li><strong>pages[]</strong> - Array of page objects containing:
+                        <ul style="margin-left: 20px;">
+                            <li>page_number</li>
+                            <li>content.text - Full page text</li>
+                            <li>content.paragraphs[] - Text split into paragraphs</li>
+                            <li>images[] - Embedded images with paths</li>
+                            <li>word_count - Words per page</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- File Structure -->
+        <div class="layer">
+            <div class="layer-title">📁 File Structure</div>
+            <div class="code-block">
+                pdf-reader-backend/
+                │
+                ├── main.py # FastAPI application
+                ├── pdf_processor.py # PDF processing logic
+                ├── config.py # Configuration
+                ├── requirements.txt # Dependencies
+                ├── index.html # Web interface
+                ├── start.sh # Startup script
+                │
+                ├── uploads/
+                │ ├── pdfs/ # Original PDFs
+                │ ├── images/ # Extracted images
+                │ │ └── {doc_id}/ # Per-document folders
+                │ └── json/ # Processed JSON
+                │
+                ├── static/ # Static file serving
+                │
+                ├── README.md # Full documentation
+                ├── QUICKSTART.md # Quick start guide
+                └── example-output.json # Sample output
+            </div>
+        </div>
+
+        <!-- Technology Stack -->
+        <div class="layer">
+            <div class="layer-title">🛠️ Technology Stack</div>
+            <div class="components">
+                <div class="component">
+                    <h3>FastAPI</h3>
+                    <p>Modern, fast web framework for building APIs with Python 3.7+</p>
+                </div>
+                <div class="component">
+                    <h3>pdfplumber</h3>
+                    <p>Powerful PDF text extraction preserving layout and structure</p>
+                </div>
+                <div class="component">
+                    <h3>pypdf</h3>
+                    <p>PDF manipulation and image extraction from documents</p>
+                </div>
+                <div class="component">
+                    <h3>Pillow (PIL)</h3>
+                    <p>Image processing library for saving and converting images</p>
+                </div>
+                <div class="component">
+                    <h3>Uvicorn</h3>
+                    <p>Lightning-fast ASGI server for async Python applications</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Example -->
+        <div class="layer">
+            <div class="layer-title">💻 Usage Example</div>
+            <div class="code-block">
+                <span style="color: #569cd6;">// JavaScript/Fetch Example</span>
+                <span style="color: #9cdcfe;">const</span> formData = <span style="color: #4ec9b0;">new</span>
+                FormData();
+                formData.append(<span style="color: #ce9178;">'file'</span>, pdfFile);
+
+                <span style="color: #9cdcfe;">const</span> response = <span style="color: #4ec9b0;">await</span>
+                fetch(<span style="color: #ce9178;">'http://localhost:8000/api/upload'</span>, {
+                method: <span style="color: #ce9178;">'POST'</span>,
+                body: formData
+                });
+
+                <span style="color: #9cdcfe;">const</span> data = <span style="color: #4ec9b0;">await</span>
+                response.json();
+                console.log(<span style="color: #ce9178;">'Document ID:'</span>, data.document_id);
+
+                <span style="color: #569cd6;">// Get complete document</span>
+                <span style="color: #9cdcfe;">const</span> doc = <span style="color: #4ec9b0;">await</span>
+                fetch(`http://localhost:8000/api/document/${data.document_id}`)
+                .then(<span style="color: #9cdcfe;">r</span> => r.json());
+
+                <span style="color: #569cd6;">// Display pages</span>
+                doc.pages.forEach(<span style="color: #9cdcfe;">page</span> => {
+                console.log(`Page ${page.page_number}: ${page.word_count} words`);
+                });
+            </div>
+        </div>
+
+        <!-- Next Steps -->
+        <div class="layer">
+            <div class="layer-title">🚀 Next Steps</div>
+            <div class="feature-grid">
+                <div class="feature">
+                    <strong>1. Install Dependencies</strong><br>
+                    <small>pip install -r requirements.txt</small>
+                </div>
+                <div class="feature">
+                    <strong>2. Start Server</strong><br>
+                    <small>python main.py or ./start.sh</small>
+                </div>
+                <div class="feature">
+                    <strong>3. Open Web UI</strong><br>
+                    <small>Open index.html in browser</small>
+                </div>
+                <div class="feature">
+                    <strong>4. Upload PDF</strong><br>
+                    <small>Test with your PDF files</small>
+                </div>
+                <div class="feature">
+                    <strong>5. View JSON</strong><br>
+                    <small>Inspect the extracted data</small>
+                </div>
+                <div class="feature">
+                    <strong>6. Integrate</strong><br>
+                    <small>Use API in your frontend</small>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</body>
+
+</html>

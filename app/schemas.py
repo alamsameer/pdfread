@@ -1,0 +1,99 @@
+"""
+Pydantic schemas for request/response validation
+"""
+from pydantic import BaseModel
+from typing import List, Optional, Any
+
+
+# ============ Document Schemas ============
+
+class DocumentCreate(BaseModel):
+    title: str
+
+
+class DocumentResponse(BaseModel):
+    id: str
+    title: str
+    file_path: str
+    total_pages: int
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentListResponse(BaseModel):
+    total: int
+    documents: List[DocumentResponse]
+
+
+# ============ Block Schemas ============
+
+class BlockResponse(BaseModel):
+    id: str
+    doc_id: str
+    page_number: int
+    block_order: int
+    text: Optional[str] = None
+    block_type: str
+    image_path: Optional[str] = None
+    words_meta: str      # JSON string
+    style_runs: str      # JSON string
+    position_meta: str   # JSON string
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Annotation Schemas ============
+
+class AnnotationCreate(BaseModel):
+    doc_id: str
+    block_id: str
+    start_word_index: int
+    end_word_index: int
+    color: str = "#ffeb3b"
+    font_size: Optional[str] = None
+    font_style: Optional[str] = None
+    note: Optional[str] = None
+    user_id: str = "anonymous"
+
+
+class AnnotationUpdate(BaseModel):
+    color: Optional[str] = None
+    font_size: Optional[str] = None
+    font_style: Optional[str] = None
+    note: Optional[str] = None
+
+
+class AnnotationResponse(BaseModel):
+    id: str
+    doc_id: str
+    block_id: str
+    start_word_index: int
+    end_word_index: int
+    annotation_type: str
+    color: str
+    font_size: Optional[str] = None
+    font_style: Optional[str] = None
+    note: Optional[str] = None
+    user_id: str
+    is_shared: int
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+# ============ API Response Schemas ============
+
+class StatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+
+class UploadResponse(BaseModel):
+    status: str
+    document_id: str
+    title: str
+    total_pages: int

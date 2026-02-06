@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run FastAPI",
+			"type": "shell",
+			"command": "C:/Users/sameer20.khan/ai-dev/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"uvicorn",
+				"app.main:app",
+				"--reload"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "run"
+		}
+	]
+}
