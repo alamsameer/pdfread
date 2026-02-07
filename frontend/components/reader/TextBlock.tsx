@@ -16,7 +16,8 @@ interface TextBlockProps {
 }
 
 export function TextBlock({ block }: TextBlockProps) {
-  const { selection, handleTokenClick } = useReaderStore();
+  const selection = useReaderStore((state) => state.selection);
+  const handleTokenClick = useReaderStore((state) => state.handleTokenClick);
   const allAnnotations = useAnnotationStore((state) => state.annotations);
   const { font_size, font_family, line_height } = usePreferencesStore((state) => state.preferences);
 
@@ -25,6 +26,31 @@ export function TextBlock({ block }: TextBlockProps) {
     () => allAnnotations.filter(a => a.block_id === block.id),
     [block.id, allAnnotations]
   );
+
+  const { selectionStart, selectionEnd, isBlockSelected } = useMemo(() => {
+    if (selection.blockId !== block.id || !selection.startTokenId) {
+      return { selectionStart: -1, selectionEnd: -1, isBlockSelected: false };
+    }
+    
+    try {
+      const startParts = selection.startTokenId.split('-');
+      const start = parseInt(startParts[startParts.length - 1]);
+      
+      let end = start;
+      if (selection.endTokenId) {
+        const endParts = selection.endTokenId.split('-');
+        end = parseInt(endParts[endParts.length - 1]);
+      }
+      
+      return {
+        selectionStart: Math.min(start, end),
+        selectionEnd: Math.max(start, end),
+        isBlockSelected: true
+      };
+    } catch (e) {
+      return { selectionStart: -1, selectionEnd: -1, isBlockSelected: false };
+    }
+  }, [selection.blockId, selection.startTokenId, selection.endTokenId, block.id]);
 
   if (block.block_type === 'image') {
     const imageUrl = block.image_path?.startsWith('http') 
@@ -54,20 +80,7 @@ export function TextBlock({ block }: TextBlockProps) {
     >
       {words.map((word, index) => {
         const tokenId = `${block.id}-${index}`;
-        const isSelected = Boolean(
-          selection.blockId === block.id &&
-          selection.startTokenId &&
-          (
-            // Case 1: Only start token selected (in progress)
-            (!selection.endTokenId && selection.startTokenId === tokenId) ||
-            // Case 2: Range selected
-            (selection.endTokenId &&
-              ((index >= parseInt(selection.startTokenId.split('-')[2]) &&
-                index <= parseInt(selection.endTokenId.split('-')[2])) ||
-                (index >= parseInt(selection.endTokenId.split('-')[2]) &&
-                  index <= parseInt(selection.startTokenId.split('-')[2]))))
-          )
-        );
+        const isSelected = isBlockSelected && index >= selectionStart && index <= selectionEnd;
 
         return (
           <TextToken

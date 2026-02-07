@@ -60,26 +60,26 @@ app.mount("/static", StaticFiles(directory=str(settings.STATIC_DIR)), name="stat
 # ============ Root & Health ============
 
 @app.get("/")
-async def root():
+def root():
     """Redirect to dashboard"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/dashboard")
 
 
 @app.get("/dashboard")
-async def dashboard_page():
+def dashboard_page():
     """Serve the dashboard interface"""
     return FileResponse(settings.STATIC_DIR / "dashboard.html")
 
 
 @app.get("/reader/{doc_id}")
-async def reader_page(doc_id: str):
+def reader_page(doc_id: str):
     """Serve the reader interface"""
     return FileResponse(settings.STATIC_DIR / "reader.html")
 
 
 @app.get("/health")
-async def health():
+def health():
     """Health check endpoint"""
     return {"status": "ok", "version": "3.0.0"}
 
@@ -87,7 +87,7 @@ async def health():
 # ============ Document Endpoints ============
 
 @app.post("/api/upload", response_model=schemas.UploadResponse)
-async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Upload and process a PDF file
     """
@@ -141,7 +141,7 @@ async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)
 
 
 @app.get("/api/documents", response_model=schemas.DocumentListResponse)
-async def list_documents(db: Session = Depends(get_db)):
+def list_documents(db: Session = Depends(get_db)):
     """
     List all processed documents
     """
@@ -153,7 +153,7 @@ async def list_documents(db: Session = Depends(get_db)):
 
 
 @app.get("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-async def get_document(doc_id: str, db: Session = Depends(get_db)):
+def get_document(doc_id: str, db: Session = Depends(get_db)):
     """
     Get document metadata
     """
@@ -164,7 +164,7 @@ async def get_document(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/documents/{doc_id}", response_model=schemas.StatusResponse)
-async def delete_document(doc_id: str, db: Session = Depends(get_db)):
+def delete_document(doc_id: str, db: Session = Depends(get_db)):
     """
     Delete a document and its associated data
     """
@@ -187,7 +187,7 @@ async def delete_document(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-async def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Depends(get_db)):
+def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Depends(get_db)):
     """
     Update document metadata (e.g. theme)
     """
@@ -230,7 +230,7 @@ def ensure_db_schema():
 # ============ Block Endpoints ============
 
 @app.get("/api/documents/{doc_id}/blocks", response_model=List[schemas.BlockResponse])
-async def get_blocks(doc_id: str, db: Session = Depends(get_db)):
+def get_blocks(doc_id: str, db: Session = Depends(get_db)):
     """
     Get all blocks for a document
     """
@@ -250,7 +250,7 @@ async def get_blocks(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/documents/{doc_id}/pages/{page_number}/blocks", response_model=List[schemas.BlockResponse])
-async def get_page_blocks(doc_id: str, page_number: int, db: Session = Depends(get_db)):
+def get_page_blocks(doc_id: str, page_number: int, db: Session = Depends(get_db)):
     """
     Get blocks for a specific page
     """
@@ -263,7 +263,7 @@ async def get_page_blocks(doc_id: str, page_number: int, db: Session = Depends(g
 
 
 @app.post("/api/documents/{doc_id}/blocks/{block_id}/split", response_model=List[schemas.BlockResponse])
-async def split_block(
+def split_block(
     doc_id: str, 
     block_id: str, 
     data: schemas.BlockSplitRequest, 
@@ -303,14 +303,11 @@ async def split_block(
     text_2 = " ".join([w.get("word", "") for w in words_2])
     
     # 4. Shift subsequent blocks
-    subsequent_blocks = db.query(models.Block).filter(
+    db.query(models.Block).filter(
         models.Block.doc_id == doc_id,
         models.Block.page_number == block.page_number,
         models.Block.block_order > block.block_order
-    ).order_by(models.Block.block_order.desc()).all()
-    
-    for b in subsequent_blocks:
-        b.block_order += 1
+    ).update({models.Block.block_order: models.Block.block_order + 1}, synchronize_session=False)
         
     # 5. Create new block
     new_block_id = str(uuid.uuid4())
@@ -342,7 +339,7 @@ async def split_block(
 # ============ Annotation Endpoints ============
 
 @app.post("/api/annotations", response_model=schemas.AnnotationResponse)
-async def create_annotation(data: schemas.AnnotationCreate, db: Session = Depends(get_db)):
+def create_annotation(data: schemas.AnnotationCreate, db: Session = Depends(get_db)):
     """
     Create a new annotation (highlight)
     """
@@ -377,7 +374,7 @@ async def create_annotation(data: schemas.AnnotationCreate, db: Session = Depend
 
 
 @app.put("/api/annotations/{annotation_id}", response_model=schemas.AnnotationResponse)
-async def update_annotation(annotation_id: str, data: schemas.AnnotationUpdate, db: Session = Depends(get_db)):
+def update_annotation(annotation_id: str, data: schemas.AnnotationUpdate, db: Session = Depends(get_db)):
     """
     Update an annotation (partial update)
     """
@@ -400,7 +397,7 @@ async def update_annotation(annotation_id: str, data: schemas.AnnotationUpdate, 
 
 
 @app.get("/api/documents/{doc_id}/annotations", response_model=List[schemas.AnnotationResponse])
-async def get_annotations(doc_id: str, db: Session = Depends(get_db)):
+def get_annotations(doc_id: str, db: Session = Depends(get_db)):
     """
     Get all annotations for a document
     """
@@ -412,7 +409,7 @@ async def get_annotations(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/annotations/{annotation_id}", response_model=schemas.StatusResponse)
-async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
+def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     """
     Delete an annotation
     """
@@ -432,7 +429,7 @@ async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
 # ============ User Preference Endpoints ============
 
 @app.get("/api/preferences/{user_id}", response_model=schemas.UserPreferenceResponse)
-async def get_user_preferences(user_id: str, db: Session = Depends(get_db)):
+def get_user_preferences(user_id: str, db: Session = Depends(get_db)):
     """
     Get user preferences. Creates default if not exists.
     """
@@ -448,7 +445,7 @@ async def get_user_preferences(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/preferences/{user_id}", response_model=schemas.UserPreferenceResponse)
-async def update_user_preferences(user_id: str, data: schemas.UserPreferenceUpdate, db: Session = Depends(get_db)):
+def update_user_preferences(user_id: str, data: schemas.UserPreferenceUpdate, db: Session = Depends(get_db)):
     """
     Update user preferences
     """
