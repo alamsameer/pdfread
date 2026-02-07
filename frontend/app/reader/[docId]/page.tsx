@@ -12,6 +12,7 @@ import { useUIStore } from '@/lib/stores/useUIStore';
 import { documentsAPI } from '@/lib/api/documents';
 import { annotationsAPI } from '@/lib/api/annotations';
 import { useHighlight } from '@/lib/hooks/useHighlight';
+import { usePreferencesStore } from '@/lib/stores/usePreferencesStore';
 import { Loader2 } from 'lucide-react';
 
 export default function ReaderPage({ params }: { params: { docId: string } }) {
@@ -23,6 +24,7 @@ export default function ReaderPage({ params }: { params: { docId: string } }) {
   const setAnnotations = useAnnotationStore((state) => state.setAnnotations);
   const { openMenu, setEditingAnnotation, selection, isSelecting, closeMenu } = useReaderStore();
   const { createHighlight, updateAnnotation, deleteAnnotation } = useHighlight(docId);
+  const fetchPreferences = usePreferencesStore((state) => state.fetchPreferences);
   const hasOpenedMenuRef = useRef(false);
 
   // Fetch document
@@ -56,6 +58,13 @@ export default function ReaderPage({ params }: { params: { docId: string } }) {
 
     fetchAnnotations();
   }, [docId, setAnnotations]);
+
+  // Fetch preferences
+  useEffect(() => {
+      fetchPreferences();
+  }, [fetchPreferences]);
+
+  // Open menu when selection is complete
 
   // Open menu when selection is complete
   useEffect(() => {

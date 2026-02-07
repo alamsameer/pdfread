@@ -349,6 +349,46 @@ async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     return schemas.StatusResponse(status="ok", message="Annotation deleted")
 
 
+# ============ User Preference Endpoints ============
+
+@app.get("/api/preferences/{user_id}", response_model=schemas.UserPreferenceResponse)
+async def get_user_preferences(user_id: str, db: Session = Depends(get_db)):
+    """
+    Get user preferences. Creates default if not exists.
+    """
+    pref = db.query(models.UserPreference).filter(models.UserPreference.user_id == user_id).first()
+    if not pref:
+        # Create default
+        pref = models.UserPreference(user_id=user_id)
+        db.add(pref)
+        db.commit()
+        db.refresh(pref)
+    
+    return pref
+
+
+@app.patch("/api/preferences/{user_id}", response_model=schemas.UserPreferenceResponse)
+async def update_user_preferences(user_id: str, data: schemas.UserPreferenceUpdate, db: Session = Depends(get_db)):
+    """
+    Update user preferences
+    """
+    pref = db.query(models.UserPreference).filter(models.UserPreference.user_id == user_id).first()
+    if not pref:
+        pref = models.UserPreference(user_id=user_id)
+        db.add(pref)
+    
+    if data.font_size is not None:
+        pref.font_size = data.font_size
+    if data.font_family is not None:
+        pref.font_family = data.font_family
+    if data.line_height is not None:
+        pref.line_height = data.line_height
+        
+    db.commit()
+    db.refresh(pref)
+    return pref
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

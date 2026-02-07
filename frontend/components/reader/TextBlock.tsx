@@ -7,6 +7,7 @@ import type { Annotation } from '@/lib/types/annotation';
 import { parseWordsMeta } from '@/lib/utils/selection';
 import { useReaderStore } from '@/lib/stores/useReaderStore';
 import { useAnnotationStore } from '@/lib/stores/useAnnotationStore';
+import { usePreferencesStore } from '@/lib/stores/usePreferencesStore';
 
 import { API_BASE_URL } from '@/lib/api/client';
 
@@ -17,6 +18,7 @@ interface TextBlockProps {
 export function TextBlock({ block }: TextBlockProps) {
   const { selection, handleTokenClick } = useReaderStore();
   const allAnnotations = useAnnotationStore((state) => state.annotations);
+  const { font_size, font_family, line_height } = usePreferencesStore((state) => state.preferences);
 
   const words = useMemo(() => parseWordsMeta(block.words_meta), [block.words_meta]);
   const annotations = useMemo(
@@ -44,6 +46,11 @@ export function TextBlock({ block }: TextBlockProps) {
     <div
       data-block-id={block.id}
       className="mb-4 leading-relaxed"
+      style={{
+        fontSize: `${font_size}px`,
+        fontFamily: font_family,
+        lineHeight: line_height,
+      }}
     >
       {words.map((word, index) => {
         const tokenId = `${block.id}-${index}`;

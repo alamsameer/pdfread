@@ -73,3 +73,12 @@ class Annotation(Base):
     # Relationships
     document = relationship("Document", back_populates="annotations")
     block = relationship("Block", back_populates="annotations")
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    user_id = Column(String, primary_key=True, default="user")
+    font_size = Column(Integer, default=18)
+    font_family = Column(String, default="Merriweather")
+    line_height = Column(String, default="1.6")

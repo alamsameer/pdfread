@@ -104,3 +104,23 @@ class UploadResponse(BaseModel):
     document_id: str
     title: str
     total_pages: int
+
+
+# ============ Preference Schemas ============
+
+class UserPreferenceBase(BaseModel):
+    user_id: str = "user"
+    font_size: int = 18
+    font_family: str = "Merriweather"
+    line_height: str = "1.6"
+
+
+class UserPreferenceUpdate(BaseModel):
+    font_size: Optional[int] = None
+    font_family: Optional[str] = None
+    line_height: Optional[str] = None
+
+
+class UserPreferenceResponse(UserPreferenceBase):
+    class Config:
+        from_attributes = True
