@@ -8,6 +8,8 @@ import { parseWordsMeta } from '@/lib/utils/selection';
 import { useReaderStore } from '@/lib/stores/useReaderStore';
 import { useAnnotationStore } from '@/lib/stores/useAnnotationStore';
 
+import { API_BASE_URL } from '@/lib/api/client';
+
 interface TextBlockProps {
   block: Block;
 }
@@ -23,10 +25,14 @@ export function TextBlock({ block }: TextBlockProps) {
   );
 
   if (block.block_type === 'image') {
+    const imageUrl = block.image_path?.startsWith('http') 
+        ? block.image_path 
+        : `${API_BASE_URL}${block.image_path}`;
+
     return (
       <div className="my-4 flex justify-center">
         <img
-          src={block.image_path}
+          src={imageUrl}
           alt={`Block ${block.block_order}`}
           className="max-w-full h-auto"
         />

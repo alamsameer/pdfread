@@ -5,6 +5,7 @@ Extracts text, words, and style information from PDF files
 import fitz  # PyMuPDF
 import json
 import uuid
+from collections import Counter
 from datetime import datetime
 from sqlalchemy.orm import Session
 import logging
@@ -12,6 +13,81 @@ import logging
 from .models import Document, Block
 
 logger = logging.getLogger("parser")
+
+
+def generate_smart_toc(doc) -> list:
+    """
+    Generate a table of contents based on font sizes (heuristic).
+    Returns list of [level, title, page].
+    """
+    try:
+        # 1. Collect font sizes and lines
+        font_counts = Counter()
+        text_lines = [] # (text, size, page_num)
+        
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            blocks = page.get_text("dict")["blocks"]
+            for block in blocks:
+                if block["type"] != 0: continue # Skip non-text
+                
+                for line in block["lines"]:
+                    if not line["spans"]: continue
+                    
+                    # Compute average/max size for the line
+                    max_size = 0
+                    line_text = ""
+                    for span in line["spans"]:
+                        if span["size"] > max_size:
+                            max_size = span["size"]
+                        line_text += span["text"] + " "
+                    
+                    line_text = line_text.strip()
+                    if not line_text: continue
+                    
+                    # Round size to minimize noise
+                    rounded_size = round(max_size * 2) / 2
+                    font_counts[rounded_size] += len(line_text)
+                    
+                    text_lines.append({
+                        "text": line_text,
+                        "size": rounded_size,
+                        "page": page_num + 1
+                    })
+        
+        if not font_counts:
+            return []
+
+        # 2. Identify Body Text (most common size)
+        if not font_counts:
+            return []
+            
+        body_size = font_counts.most_common(1)[0][0]
+        
+        # 3. Identify Heading Candidates (larger than body)
+        # We consider sizes at least 10% larger than body
+        candidates = sorted([s for s in font_counts if s > body_size * 1.1], reverse=True)
+        
+        # Map top 3 sizes to levels 1, 2, 3
+        # Use simple mapping: Largest -> 1, Second -> 2...
+        if not candidates:
+            return []
+            
+        heading_levels = {size: i + 1 for i, size in enumerate(candidates[:3])}
+        
+        # 4. Construct TOC
+        toc = []
+        for line in text_lines:
+            lvl = heading_levels.get(line["size"])
+            if lvl:
+                toc.append([lvl, line["text"], line["page"]])
+                
+        return toc
+
+    except Exception as e:
+        logger.error(f"Smart TOC generation failed: {e}")
+        return []
+
 
 
 def parse_pdf(file_path: str, db_session: Session, doc_id: str, title: str) -> Document:
@@ -32,13 +108,20 @@ def parse_pdf(file_path: str, db_session: Session, doc_id: str, title: str) -> D
     doc = fitz.open(file_path)
     total_pages = len(doc)
     
+    # Get TOC (native or smart)
+    toc_data = doc.get_toc()
+    if not toc_data:
+        logger.info("Native TOC not found. Attempting smart generation...")
+        toc_data = generate_smart_toc(doc)
+    
     # Create document record
     doc_record = Document(
         id=doc_id,
         title=title,
         file_path=file_path,
         total_pages=total_pages,
-        created_at=datetime.utcnow().isoformat()
+        created_at=datetime.utcnow().isoformat(),
+        toc=json.dumps(toc_data)
     )
     db_session.add(doc_record)
     

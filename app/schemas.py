@@ -18,6 +18,7 @@ class DocumentResponse(BaseModel):
     total_pages: int
     created_at: str
     theme: str = "plain"
+    toc: Optional[str] = None
 
     class Config:
         from_attributes = True

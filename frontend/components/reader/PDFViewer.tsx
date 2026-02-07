@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useDocumentStore } from '@/lib/stores/useDocumentStore';
 import { PDFPage } from './PDFPage';
 import { ReaderToolbar } from './ReaderToolbar';
+import { useReaderStore } from '@/lib/stores/useReaderStore';
 import { Loader2 } from 'lucide-react';
 import { THEMES } from '@/lib/constants/themes';
 
@@ -13,6 +14,7 @@ interface PDFViewerProps {
 
 export function PDFViewer({ docId }: PDFViewerProps) {
   const currentDocument = useDocumentStore((state) => state.currentDocument);
+  const { targetPage, jumpToPage } = useReaderStore((state) => ({ targetPage: state.targetPage, jumpToPage: state.jumpToPage }));
   const [currentPage, setCurrentPage] = useState(1);
   const [visiblePages, setVisiblePages] = useState<number[]>([1]);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -45,6 +47,26 @@ export function PDFViewer({ docId }: PDFViewerProps) {
 
     return () => observer.disconnect();
   }, [visiblePages, currentDocument]);
+
+  // Handle TOC Navigation
+  useEffect(() => {
+    if (targetPage) {
+      // Ensure target page is visible
+      if (targetPage > visiblePages[visiblePages.length - 1]) {
+        const newPages = Array.from({ length: targetPage }, (_, i) => i + 1);
+        setVisiblePages(newPages);
+      }
+
+      // Scroll to page
+      setTimeout(() => {
+        const element = document.getElementById(`page-${targetPage}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          jumpToPage(null);
+        }
+      }, 100);
+    }
+  }, [targetPage, visiblePages, jumpToPage]);
 
   if (!currentDocument) {
     return (

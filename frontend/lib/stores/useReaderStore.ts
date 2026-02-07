@@ -22,6 +22,9 @@ interface ReaderState {
   // Current annotation being edited
   editingAnnotationId: string | null;
 
+  // Navigation
+  targetPage: number | null;
+
   // Actions
   setSelection: (selection: Partial<Selection>) => void;
   clearSelection: () => void;
@@ -33,6 +36,7 @@ interface ReaderState {
   updateAnnotation: (id: string, params: { color?: string; annotation_type?: string; note?: string; font_style?: string }) => Promise<void>;
   deleteAnnotation: (id: string) => Promise<void>;
   handleTokenClick: (tokenId: string, blockId: string, docId: string, annotationId: string | null, event: React.MouseEvent) => void;
+  jumpToPage: (page: number | null) => void;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -46,6 +50,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   menuPosition: null,
   isMenuOpen: false,
   editingAnnotationId: null,
+  targetPage: null,
 
   setSelection: (newSelection) =>
     set((state) => ({
@@ -222,5 +227,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       };
     });
   },
+
+  jumpToPage: (page) => set({ targetPage: page }),
 }));
 

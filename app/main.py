@@ -214,7 +214,12 @@ def ensure_db_schema():
             if "theme" not in columns:
                 logger.info("Migrating DB: Adding 'theme' column to 'documents' table")
                 conn.execute(text("ALTER TABLE documents ADD COLUMN theme TEXT DEFAULT 'plain'"))
-                conn.commit()
+            
+            if "toc" not in columns:
+                logger.info("Migrating DB: Adding 'toc' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN toc TEXT"))
+                
+            conn.commit()
     except Exception as e:
         logger.warning(f"DB Migration check failed: {e}")
 

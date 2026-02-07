@@ -16,6 +16,7 @@ class Document(Base):
     total_pages = Column(Integer)
     created_at = Column(String)
     theme = Column(String, default="plain")
+    toc = Column(Text, nullable=True)  # JSON string of table of contents
 
     # Relationships
     blocks = relationship("Block", back_populates="document", cascade="all, delete-orphan")
