@@ -35,3 +35,38 @@ body {
 .token:hover {
   background-color: #fef08a;
 }
+
+@layer components {
+  .glass-blue {
+    @apply bg-[#38bdf8]/95 backdrop-blur-md border-[#38bdf8] shadow-lg shadow-sky-500/30;
+  }
+
+  /* Override text colors for better contrast against bright blue */
+  .glass-blue .text-gray-700,
+  .glass-blue .text-gray-500,
+  .glass-blue button {
+    color: #0f172a !important;
+    /* slate-900 */
+  }
+
+  /* Remove default focus rings in the blue glass mode */
+  .glass-blue button:focus-visible {
+    @apply ring-0 ring-offset-0 outline-none;
+  }
+
+  /* Make the muted page counter visible but distinct */
+  .glass-blue .text-gray-400 {
+    color: #334155 !important;
+    /* slate-700 */
+  }
+
+  /* Adjust hover effects to be soft white instead of gray */
+  .glass-blue .hover\:bg-gray-100:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* Divider color adjustment */
+  .glass-blue .bg-gray-200 {
+    background-color: rgba(15, 23, 42, 0.2) !important;
+  }
+}

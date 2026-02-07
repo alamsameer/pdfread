@@ -29,9 +29,10 @@ import {
 interface ThemeSelectorProps {
   currentTheme: string;
   docId: string;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function ThemeSelector({ currentTheme, docId }: ThemeSelectorProps) {
+export function ThemeSelector({ currentTheme, docId, onOpenChange }: ThemeSelectorProps) {
   const setDocument = useDocumentStore((state) => state.setDocument);
   const currentDocument = useDocumentStore((state) => state.currentDocument);
   const { 
@@ -57,89 +58,113 @@ export function ThemeSelector({ currentTheme, docId }: ThemeSelectorProps) {
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button 
           variant="ghost" 
           size="icon" 
-          className="h-9 w-9 rounded-full hover:bg-gray-100" 
+          className="h-9 w-9 rounded-full hover:bg-gray-100 text-gray-700" 
           title="Change Theme"
         >
-          <Palette className="h-4 w-4" />
+          <Palette className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuSeparator />
+      <DropdownMenuContent 
+        align="center" 
+        className="w-80 rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95"
+        sideOffset={15}
+      >
+        <div className="mb-5 flex items-center justify-between px-1">
+            <span className="text-sm font-bold text-gray-900 tracking-tight">Appearance</span>
+        </div>
         
-        {/* Font Size */}
-        <div className="px-2 py-2">
-            <div className="mb-2 flex items-center justify-between text-xs font-medium text-gray-500">
-                <span>Font Size</span>
-                <span>{preferences.font_size}px</span>
+        {/* Font Settings */}
+        <div className="space-y-5">
+            {/* Font Size */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <span>Text Size</span>
+                    <span className="text-gray-900">{preferences.font_size}px</span>
+                </div>
+                <Slider
+                    value={[preferences.font_size]}
+                    min={12}
+                    max={32}
+                    step={1}
+                    onValueChange={(vals: number[]) => setFontSize(vals[0])}
+                    className="w-full cursor-pointer"
+                />
             </div>
-            <Slider
-                value={[preferences.font_size]}
-                min={12}
-                max={32}
-                step={1}
-                onValueChange={(vals: number[]) => setFontSize(vals[0])}
-                className="w-full"
-            />
+
+            {/* Font Family & Line Height Row */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Font</span>
+                    <Select value={preferences.font_family} onValueChange={setFontFamily}>
+                        <SelectTrigger className="h-10 w-full rounded-xl border-gray-300 bg-white text-sm font-medium text-gray-900 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+                            <SelectValue placeholder="Font" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px] z-[100] bg-white border border-gray-200 shadow-xl rounded-xl">
+                            <SelectItem value="Merriweather" className="font-serif">Merriweather</SelectItem>
+                            <SelectItem value="Inter" className="font-sans">Inter</SelectItem>
+                            <SelectItem value="Roboto" className="font-sans">Roboto</SelectItem>
+                            <SelectItem value="Outfit" className="font-sans">Outfit</SelectItem>
+                            <SelectItem value="Times New Roman" className="font-serif">Times</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Height</span>
+                    <Select value={preferences.line_height} onValueChange={setLineHeight}>
+                        <SelectTrigger className="h-10 w-full rounded-xl border-gray-300 bg-white text-sm font-medium text-gray-900 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+                            <SelectValue placeholder="Height" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px] z-[100] bg-white border border-gray-200 shadow-xl rounded-xl">
+                            <SelectItem value="1.2">Compact</SelectItem>
+                            <SelectItem value="1.4">Normal</SelectItem>
+                            <SelectItem value="1.6">Relaxed</SelectItem>
+                            <SelectItem value="1.8">Loose</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
         </div>
 
-        {/* Font Family */}
-        <div className="px-2 py-2">
-            <div className="mb-1 text-xs font-medium text-gray-500">Font Family</div>
-            <Select value={preferences.font_family} onValueChange={setFontFamily}>
-                <SelectTrigger className="h-8 w-full text-xs">
-                    <SelectValue placeholder="Font" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="Merriweather">Merriweather</SelectItem>
-                    <SelectItem value="Inter">Inter</SelectItem>
-                    <SelectItem value="Roboto">Roboto</SelectItem>
-                    <SelectItem value="Outfit">Outfit</SelectItem>
-                    <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                </SelectContent>
-            </Select>
+        <DropdownMenuSeparator className="my-5 bg-gray-100" />
+
+        {/* Themes Grid */}
+        <div className="space-y-3">
+            <span className="px-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Theme</span>
+            <div className="grid grid-cols-3 gap-3">
+                {THEMES.map((theme) => (
+                <button
+                    key={theme.id}
+                    onClick={() => handleThemeChange(theme.id)}
+                    className={`group relative flex flex-col items-center gap-2 rounded-xl border p-2 transition-all duration-200 hover:shadow-md ${
+                        currentTheme === theme.id 
+                            ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600' 
+                            : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                >
+                    {/* Color Preview Swatch */}
+                    <div 
+                        className={`h-8 w-full rounded-lg shadow-inner border border-black/5 ${theme.className}`} 
+                    />
+                    
+                    {/* Label */}
+                    <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-medium ${currentTheme === theme.id ? 'text-blue-700' : 'text-gray-700'}`}>
+                            {theme.name}
+                        </span>
+                        {currentTheme === theme.id && (
+                             <Check className="h-3 w-3 text-blue-600" />
+                        )}
+                    </div>
+                </button>
+                ))}
+            </div>
         </div>
-
-        {/* Line Height */}
-        <div className="px-2 py-2 mb-2">
-            <div className="mb-1 text-xs font-medium text-gray-500">Line Height</div>
-            <Select value={preferences.line_height} onValueChange={setLineHeight}>
-                <SelectTrigger className="h-8 w-full text-xs">
-                    <SelectValue placeholder="Line Height" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="1.2">Compact (1.2)</SelectItem>
-                    <SelectItem value="1.4">Normal (1.4)</SelectItem>
-                    <SelectItem value="1.6">Relaxed (1.6)</SelectItem>
-                    <SelectItem value="1.8">Loose (1.8)</SelectItem>
-                    <SelectItem value="2.0">Double (2.0)</SelectItem>
-                </SelectContent>
-            </Select>
-        </div>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuLabel>Reading Theme</DropdownMenuLabel>
-        {THEMES.map((theme) => (
-          <DropdownMenuItem
-            key={theme.id}
-            onClick={() => handleThemeChange(theme.id)}
-            className="flex items-center justify-between"
-          >
-            <span className="flex items-center gap-2">
-              <div 
-                className={`h-4 w-4 rounded border border-gray-200 ${theme.className}`} 
-                style={theme.id === 'ruled' || theme.id === 'grid' ? { height: '16px' } : undefined} // Fix for preview
-              />
-              {theme.name}
-            </span>
-            {currentTheme === theme.id && <Check className="h-4 w-4" />}
-          </DropdownMenuItem>
-        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
