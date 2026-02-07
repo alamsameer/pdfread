@@ -6,6 +6,14 @@ let pendingSelectionBlockId = null;
 let currentAnnotationId = null; // Track editing state
 let currentAnnotationData = null; // Store current annotation data
 
+// Pagination state
+let total_pages = 0;
+let loaded_pages = 0;
+let isLoading = false;
+
+// Annotations state
+let allAnnotations = [];
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -17,15 +25,49 @@ async function init() {
         document.getElementById('docTitle').innerText = doc.title;
         document.getElementById('pageCount').innerText = `${doc.total_pages} Pages`;
 
+        // Initialize pagination state
+        total_pages = doc.total_pages;
+        loaded_pages = 0;
+
         const container = document.getElementById('pages');
         container.innerHTML = '';
 
-        const maxPages = Math.min(doc.total_pages, 10);
-        for (let i = 1; i <= maxPages; i++) {
+        // Load initial pages (first 10 or all if less)
+        const initialPages = Math.min(total_pages, 10);
+        for (let i = 1; i <= initialPages; i++) {
             await loadPage(i);
+            loaded_pages++;
+        }
+
+        // Add "Load More" button if there are more pages
+        if (loaded_pages < total_pages) {
+            addLoadMoreButton();
         }
 
         await loadHighlights();
+
+        // Setup sidebar toggle
+        setupSidebar();
+
+    } catch (e) {
+        showToast('Error', e.message, 'error');
+    }
+}
+
+// Setup sidebar
+function setupSidebar() {
+    const toggleBtn = document.getElementById('toggleSidebar');
+    const sidebar = document.getElementById('sidebar');
+    const closeBtn = document.getElementById('closeSidebar');
+
+    toggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+
+    closeBtn.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+    });
+}
 
         // Setup menu listeners for font size
         document.querySelectorAll('.font-size-btn').forEach(btn => {
@@ -81,7 +123,7 @@ async function init() {
         });
 
     } catch (e) {
-        alert(e.message);
+        showToast('Error', e.message, 'error');
     }
 }
 
@@ -95,6 +137,119 @@ async function loadPage(pageNum) {
     } catch (e) {
         console.error(`Failed to load page ${pageNum}`, e);
     }
+}
+
+// Add "Load More" button
+function addLoadMoreButton() {
+    const container = document.getElementById('pages');
+
+    const loadMoreBtn = document.createElement('button');
+    loadMoreBtn.id = 'loadMoreBtn';
+    loadMoreBtn.className = 'load-more-btn';
+    loadMoreBtn.innerHTML = '<span class="btn-text">Load More Pages</span><span class="btn-info"></span>';
+    loadMoreBtn.onclick = loadMorePages;
+
+    container.appendChild(loadMoreBtn);
+    updateLoadMoreButton();
+}
+
+// Update "Load More" button text
+function updateLoadMoreButton() {
+    const btn = document.getElementById('loadMoreBtn');
+    if (!btn) {
+        // If button doesn't exist and there are more pages, add it
+        if (loaded_pages < total_pages) {
+            addLoadMoreButton();
+        }
+        return;
+    }
+
+    const info = btn.querySelector('.btn-info');
+    const remaining = total_pages - loaded_pages;
+
+    if (remaining <= 0) {
+        btn.remove();
+    } else {
+        info.textContent = `(${loaded_pages} of ${total_pages} loaded)`;
+    }
+}
+
+// Load more pages
+async function loadMorePages() {
+    if (isLoading || loaded_pages >= total_pages) return;
+
+    isLoading = true;
+    const btn = document.getElementById('loadMoreBtn');
+    const btnText = btn.querySelector('.btn-text');
+    const originalText = btnText.textContent;
+
+    try {
+        btnText.textContent = 'Loading...';
+        btn.disabled = true;
+
+        // Load next 10 pages
+        const pagesToLoad = Math.min(10, total_pages - loaded_pages);
+        const startPage = loaded_pages + 1;
+
+        for (let i = 0; i < pagesToLoad; i++) {
+            await loadPage(startPage + i);
+            loaded_pages++;
+        }
+
+        updateLoadMoreButton();
+
+        // Reload highlights to include new pages
+        await loadHighlights();
+    } catch (e) {
+        console.error('Failed to load more pages', e);
+        showToast('Error', 'Failed to load pages. Please try again.', 'error');
+        btnText.textContent = originalText;
+        btn.disabled = false;
+    } finally {
+        isLoading = false;
+    }
+}
+
+// Show toast notification
+function showToast(title, message, type = 'info') {
+    // Create toast container if it doesn't exist
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: '✓',
+        error: '✕',
+        info: 'ℹ'
+    };
+
+    toast.innerHTML = `
+        <div class="toast-icon">${icons[type]}</div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        toast.classList.add('removing');
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 300);
+    }, 5000);
 }
 
 function renderPage(pageNum, blocks) {
@@ -223,7 +378,7 @@ function handleTokenClick(e, tokenId, blockId) {
     // Second click (must be same block)
     if (selectionStart && !selectionEnd) {
         if (blockId !== pendingSelectionBlockId) {
-            alert("Please select text within the same paragraph/block.");
+            showToast('Selection Error', 'Please select text within the same paragraph/block.', 'error');
             clearSelection();
             return;
         }
@@ -350,13 +505,13 @@ function createHighlight(color) {
         const note = document.getElementById('annotation-note').value;
         applyHighlightWithParams({ color: color, note: note || null });
     } else {
-        alert("Please select text first");
+        showToast('Selection Required', 'Please select text first', 'error');
     }
 }
 
 async function applyHighlightWithParams(params = {}) {
     if (!selectionStart || !selectionEnd) {
-        alert("Please select text first");
+        showToast('Selection Required', 'Please select text first', 'error');
         return;
     }
 
@@ -410,7 +565,7 @@ async function applyHighlightWithParams(params = {}) {
 
     } catch (e) {
         console.error("Failed to save highlight", e);
-        alert("Failed to save annotation. Please try again.");
+        showToast('Save Failed', 'Failed to save annotation. Please try again.', 'error');
     }
 }
 
@@ -419,6 +574,12 @@ async function loadHighlights() {
         const res = await fetch(`/api/documents/${docId}/annotations`);
         if (!res.ok) return;
         const highlights = await res.json();
+
+        // Store all annotations
+        allAnnotations = highlights;
+
+        // Update annotation count
+        document.getElementById('annotationCount').textContent = highlights.length;
 
         // Clear existing annotation styles
         document.querySelectorAll('.token').forEach(el => {
@@ -493,9 +654,127 @@ async function loadHighlights() {
                 }
             }
         });
+
+        // Populate sidebar
+        populateSidebar();
     } catch (e) {
         console.error("Failed to load highlights", e);
     }
+}
+
+// Populate annotation sidebar
+function populateSidebar() {
+    const sidebarContent = document.getElementById('sidebarContent');
+
+    if (allAnnotations.length === 0) {
+        sidebarContent.innerHTML = `
+            <div class="annotation-empty">
+                <div class="annotation-empty-icon">📝</div>
+                <div class="annotation-empty-text">No annotations yet</div>
+                <div class="annotation-empty-subtext">Select text to create highlights</div>
+            </div>
+        `;
+        return;
+    }
+
+    sidebarContent.innerHTML = '';
+
+    // Group annotations by page
+    const annotationsByPage = {};
+    allAnnotations.forEach(ann => {
+        // Find the page for this block
+        const blockEl = document.querySelector(`[data-bid="${ann.block_id}"]`);
+        if (blockEl) {
+            const pageEl = blockEl.closest('.page');
+            if (pageEl) {
+                const pageNum = parseInt(pageEl.dataset.page);
+                if (!annotationsByPage[pageNum]) {
+                    annotationsByPage[pageNum] = [];
+                }
+                annotationsByPage[pageNum].push(ann);
+            }
+        }
+    });
+
+    // Render annotations grouped by page
+    Object.keys(annotationsByPage).sort((a, b) => a - b).forEach(pageNum => {
+        const pageGroup = document.createElement('div');
+        pageGroup.className = 'annotation-page-group';
+        pageGroup.innerHTML = `
+            <div class="annotation-page-header">Page ${pageNum}</div>
+        `;
+
+        annotationsByPage[pageNum].forEach(ann => {
+            const item = createAnnotationItem(ann);
+            pageGroup.appendChild(item);
+        });
+
+        sidebarContent.appendChild(pageGroup);
+    });
+}
+
+// Create annotation item for sidebar
+function createAnnotationItem(annotation) {
+    const item = document.createElement('div');
+    item.className = 'annotation-item';
+    item.onclick = () => scrollToAnnotation(annotation);
+
+    // Get the annotated text
+    const text = getAnnotationText(annotation);
+
+    item.innerHTML = `
+        <div class="annotation-item-header">
+            <div class="annotation-color-indicator" style="background: ${annotation.color || '#ffeb3b'}"></div>
+            <span class="annotation-page-badge">Highlight</span>
+        </div>
+        <div class="annotation-text">${escapeHtml(text)}</div>
+        ${annotation.note ? `<div class="annotation-note">📝 ${escapeHtml(annotation.note)}</div>` : ''}
+    `;
+
+    return item;
+}
+
+// Get annotation text
+function getAnnotationText(annotation) {
+    const start = annotation.start_word_index;
+    const end = annotation.end_word_index;
+
+    let words = [];
+    for (let i = start; i < end; i++) {
+        const tid = `${annotation.block_id}_${i}`;
+        const el = document.getElementById(`t-${tid}`);
+        if (el) {
+            words.push(el.textContent.trim());
+        }
+    }
+
+    return words.join(' ') || 'Annotation text';
+}
+
+// Scroll to annotation
+function scrollToAnnotation(annotation) {
+    const tid = `${annotation.block_id}_${annotation.start_word_index}`;
+    const el = document.getElementById(`t-${tid}`);
+
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Flash effect
+        el.style.transition = 'background-color 0.3s';
+        const originalBg = el.style.backgroundColor;
+        el.style.backgroundColor = '#64b5f6';
+
+        setTimeout(() => {
+            el.style.backgroundColor = originalBg;
+        }, 1000);
+    }
+}
+
+// Escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Close menu on outside click
@@ -543,7 +822,7 @@ async function updateAnnotation(annId, params) {
     } catch (e) {
         console.error("Update failed", e);
         saveBtn.innerText = "Error";
-        alert("Failed to update annotation. Please try again.");
+        showToast('Update Failed', 'Failed to update annotation. Please try again.', 'error');
     } finally {
         setTimeout(() => {
             saveBtn.innerText = originalText;
@@ -574,6 +853,6 @@ async function deleteAnnotation(annId) {
 
     } catch (e) {
         console.error("Delete failed", e);
-        alert("Failed to delete annotation. Please try again.");
+        showToast('Delete Failed', 'Failed to delete annotation. Please try again.', 'error');
     }
 }

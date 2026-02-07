@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Structured PDF Reader</title>
-    <link rel="stylesheet" href="/ui/reader.css">
+    <link rel="stylesheet" href="/static/reader.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -18,11 +18,26 @@
         <a href="/" class="back-link">← Back</a>
         <div class="doc-title" id="docTitle">Loading...</div>
         <div class="actions">
+            <button id="toggleSidebar" class="btn-toggle-sidebar" title="Toggle annotations panel">
+                <span class="icon">📝</span>
+                <span class="count" id="annotationCount">0</span>
+            </button>
             <span id="pageCount"></span>
         </div>
     </div>
 
     <div id="reader-container">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h2>Annotations</h2>
+                <button class="sidebar-close" id="closeSidebar">&times;</button>
+            </div>
+            <div id="sidebarContent" class="sidebar-content">
+                <!-- Annotations will be listed here -->
+            </div>
+        </aside>
+
         <!-- Pages will be rendered here -->
         <div id="pages"></div>
     </div>
@@ -95,7 +110,7 @@
         </div>
     </div>
 
-    <script src="/ui/reader.js"></script>
+    <script src="/static/reader.js"></script>
 </body>
 
 </html>

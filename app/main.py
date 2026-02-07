@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List
 import logging
 from datetime import datetime
+from sqlalchemy import text
 
 from .config import settings
 from .database import engine, get_db
@@ -57,14 +58,21 @@ app.mount("/static", StaticFiles(directory=str(settings.STATIC_DIR)), name="stat
 
 @app.get("/")
 async def root():
-    """Serve the web interface"""
-    return FileResponse(settings.BASE_DIR / "index.html")
+    """Redirect to dashboard"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard")
+
+
+@app.get("/dashboard")
+async def dashboard_page():
+    """Serve the dashboard interface"""
+    return FileResponse(settings.STATIC_DIR / "dashboard.html")
 
 
 @app.get("/reader/{doc_id}")
 async def reader_page(doc_id: str):
     """Serve the reader interface"""
-    return FileResponse(settings.BASE_DIR / "reader.html")
+    return FileResponse(settings.STATIC_DIR / "reader.html")
 
 
 @app.get("/health")
@@ -173,6 +181,42 @@ async def delete_document(doc_id: str, db: Session = Depends(get_db)):
     logger.info(f"Document {doc_id} deleted")
     
     return schemas.StatusResponse(status="ok", message="Document deleted")
+
+
+@app.patch("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
+async def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Depends(get_db)):
+    """
+    Update document metadata (e.g. theme)
+    """
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    if data.theme is not None:
+        doc.theme = data.theme
+    if data.title is not None:
+        doc.title = data.title
+        
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+# ============ Database Migration Helper (Dev Only) ============
+@app.on_event("startup")
+def ensure_db_schema():
+    """Ensure new columns exist in SQLite"""
+    try:
+        with engine.connect() as conn:
+            # Check if theme column exists
+            result = conn.execute(text("PRAGMA table_info(documents)"))
+            columns = [row.name for row in result]
+            if "theme" not in columns:
+                logger.info("Migrating DB: Adding 'theme' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN theme TEXT DEFAULT 'plain'"))
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"DB Migration check failed: {e}")
 
 
 # ============ Block Endpoints ============

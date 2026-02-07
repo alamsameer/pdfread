@@ -79,6 +79,9 @@ CREATE TABLE annotations (
     end_word_index INTEGER,
     annotation_type TEXT,
     color TEXT,
+    font_size TEXT,       -- e.g. "12px"
+    font_style TEXT,      -- e.g. "bold", "italic", "underline"
+    note TEXT,            -- User notes
     user_id TEXT,
     is_shared INTEGER,
     created_at TEXT,

@@ -17,9 +17,15 @@ class DocumentResponse(BaseModel):
     file_path: str
     total_pages: int
     created_at: str
+    theme: str = "plain"
 
     class Config:
         from_attributes = True
+
+
+class DocumentUpdate(BaseModel):
+    title: Optional[str] = None
+    theme: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):
