@@ -68,6 +68,32 @@ export function PDFViewer({ docId }: PDFViewerProps) {
     }
   }, [targetPage, visiblePages, jumpToPage]);
 
+  // Handle Block Splitting (Enter Key)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        const { selection, splitBlock } = useReaderStore.getState();
+        
+        if (selection.blockId && selection.startTokenId && selection.docId) {
+          const parts = selection.startTokenId.split('-');
+          const index = parseInt(parts[parts.length - 1]);
+          
+          if (!isNaN(index)) {
+            // Split AFTER the selected word
+            splitBlock(selection.blockId, index + 1, selection.docId);
+            // Clear selection after split to avoid repeated splits? 
+            // Or keep it? keeping it might be confusing if the token moves.
+            // Let's clear it for safety.
+            useReaderStore.getState().clearSelection();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (!currentDocument) {
     return (
       <div className="flex min-h-screen items-center justify-center">

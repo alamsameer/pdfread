@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { annotationsAPI } from '@/lib/api/annotations';
+import { documentsAPI } from '@/lib/api/documents';
 import { useAnnotationStore } from './useAnnotationStore';
+import { useDocumentStore } from './useDocumentStore';
 import toast from 'react-hot-toast';
 
 interface Selection {
@@ -35,6 +37,7 @@ interface ReaderState {
   createAnnotation: (params: { color: string; annotation_type?: string; note?: string; font_style?: string }) => Promise<void>;
   updateAnnotation: (id: string, params: { color?: string; annotation_type?: string; note?: string; font_style?: string }) => Promise<void>;
   deleteAnnotation: (id: string) => Promise<void>;
+  splitBlock: (blockId: string, wordIndex: number, docId: string) => Promise<void>;
   handleTokenClick: (tokenId: string, blockId: string, docId: string, annotationId: string | null, event: React.MouseEvent) => void;
   jumpToPage: (page: number | null) => void;
 }
@@ -179,6 +182,22 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
           console.error("Failed to delete annotation:", err);
           toast.error('Failed to delete annotation');
       }
+  },
+
+  splitBlock: async (blockId, wordIndex, docId) => {
+    try {
+        const blocks = await documentsAPI.splitBlock(docId, blockId, wordIndex);
+        if (blocks.length > 0) {
+            const pageNum = blocks[0].page_number;
+            // Refetch page blocks to ensure consistent order
+            const pageBlocks = await documentsAPI.getPageBlocks(docId, pageNum);
+            useDocumentStore.getState().setPage(pageNum, pageBlocks);
+            toast.success('Block split');
+        }
+    } catch (err) {
+        console.error("Failed to split block:", err);
+        toast.error('Failed to split block');
+    }
   },
 
   handleTokenClick: (tokenId, blockId, docId, annotationId, event) => {

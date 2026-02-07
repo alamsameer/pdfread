@@ -52,6 +52,10 @@ class BlockResponse(BaseModel):
         from_attributes = True
 
 
+class BlockSplitRequest(BaseModel):
+    split_index: int
+
+
 # ============ Annotation Schemas ============
 
 class AnnotationCreate(BaseModel):

@@ -13,10 +13,13 @@ from pathlib import Path
 from typing import List
 import logging
 from datetime import datetime
+import json
 from sqlalchemy import text
 
 from .config import settings
 from .database import engine, get_db
+
+
 from .parser import parse_pdf
 from . import models
 from . import schemas
@@ -257,6 +260,83 @@ async def get_page_blocks(doc_id: str, page_number: int, db: Session = Depends(g
     ).order_by(models.Block.block_order).all()
     
     return blocks
+
+
+@app.post("/api/documents/{doc_id}/blocks/{block_id}/split", response_model=List[schemas.BlockResponse])
+async def split_block(
+    doc_id: str, 
+    block_id: str, 
+    data: schemas.BlockSplitRequest, 
+    db: Session = Depends(get_db)
+):
+    """
+    Split a block into two at the specified word index.
+    The word at split_index becomes the first word of the new block.
+    """
+    # 1. Get original block
+    block = db.query(models.Block).filter(
+        models.Block.id == block_id,
+        models.Block.doc_id == doc_id
+    ).first()
+    
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found")
+        
+    # 2. Parse metadata
+    try:
+        words = json.loads(block.words_meta) if block.words_meta else []
+        styles = block.style_runs 
+        pos = block.position_meta
+    except json.JSONDecodeError:
+        words = []
+
+    split_idx = data.split_index
+    
+    if split_idx <= 0 or split_idx >= len(words):
+        raise HTTPException(status_code=400, detail="Invalid split index")
+        
+    # 3. Split Data
+    words_1 = words[:split_idx]
+    words_2 = words[split_idx:]
+    
+    text_1 = " ".join([w.get("word", "") for w in words_1])
+    text_2 = " ".join([w.get("word", "") for w in words_2])
+    
+    # 4. Shift subsequent blocks
+    subsequent_blocks = db.query(models.Block).filter(
+        models.Block.doc_id == doc_id,
+        models.Block.page_number == block.page_number,
+        models.Block.block_order > block.block_order
+    ).order_by(models.Block.block_order.desc()).all()
+    
+    for b in subsequent_blocks:
+        b.block_order += 1
+        
+    # 5. Create new block
+    new_block_id = str(uuid.uuid4())
+    new_block = models.Block(
+        id=new_block_id,
+        doc_id=doc_id,
+        page_number=block.page_number,
+        block_order=block.block_order + 1,
+        text=text_2,
+        block_type=block.block_type,
+        image_path=block.image_path,
+        words_meta=json.dumps(words_2),
+        style_runs=styles,
+        position_meta=pos
+    )
+    
+    # 6. Update old block
+    block.text = text_1
+    block.words_meta = json.dumps(words_1)
+    
+    db.add(new_block)
+    db.commit()
+    db.refresh(block)
+    db.refresh(new_block)
+    
+    return [block, new_block]
 
 
 # ============ Annotation Endpoints ============

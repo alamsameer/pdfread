@@ -50,4 +50,13 @@ export const documentsAPI = {
     const response = await apiClient.patch<Document>(`/api/documents/${docId}`, data);
     return response.data;
   },
+
+  // Split block
+  splitBlock: async (docId: string, blockId: string, splitIndex: number): Promise<Block[]> => {
+    const response = await apiClient.post<Block[]>(
+      `/api/documents/${docId}/blocks/${blockId}/split`, 
+      { split_index: splitIndex }
+    );
+    return response.data;
+  },
 };
