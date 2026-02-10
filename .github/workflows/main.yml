@@ -1,4 +1,5 @@
 name: Scheduled invoke — call-external-health
+# cron wakeup
 
 # Run every 5 minutes and allow manual dispatch
 on:
