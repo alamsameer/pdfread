@@ -1,0 +1,63 @@
+name: Scheduled invoke — call-external-health
+
+# Run every 5 minutes and allow manual dispatch
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  invoke:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SCHEDULE_SECRET: ${{ secrets.SCHEDULE_SECRET }}
+      FUNCTION_NAME: call-external-health
+
+    steps:
+      - name: Run scheduled POST to Edge Function
+        run: |
+          set -euo pipefail
+
+          URL="https://${PROJECT_ID}.supabase.co/functions/v1/${FUNCTION_NAME}"
+          echo "Invoking ${URL} ..."
+
+          # Payload — adjust as needed
+          PAYLOAD='{"source":"github-scheduled-invoker","ts":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}'
+
+          # Build headers
+          AUTH_HEADER="Authorization: Bearer ${ANON_KEY}"
+          CT_HEADER="Content-Type: application/json"
+
+          # Optional signed header — recommended if you want your function to validate the caller
+          if [ -n "${SCHEDULE_SECRET:-}" ]; then
+            # Simple HMAC-SHA256 of payload (base64url). Requires 'openssl' which is available on runners.
+            SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "${SCHEDULE_SECRET}" -binary | openssl base64 -A)
+            SIG_HEADER="X-Schedule-Signature: sha256=${SIG}"
+            echo "Using schedule signature header"
+          else
+            SIG_HEADER=""
+            echo "No SCHEDULE_SECRET provided; skipping signature header"
+          fi
+
+          # Do the POST
+          HTTP_STATUS=$(curl -s -o /tmp/response_body -w "%{http_code}" -X POST \
+            -H "${AUTH_HEADER}" \
+            -H "${CT_HEADER}" \
+            -H "${SIG_HEADER}" \
+            -d "${PAYLOAD}" \
+            "${URL}" || true)
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Response body:"
+          cat /tmp/response_body || true
+
+          # Fail the job on 5xx responses (adjust if you want different behavior)
+          if [[ "$HTTP_STATUS" -ge 500 ]]; then
+            echo "Server error from function (status $HTTP_STATUS)"
+            exit 1
+          fi
