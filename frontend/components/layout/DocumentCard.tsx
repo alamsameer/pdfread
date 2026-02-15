@@ -1,11 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { FileText, Calendar, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileText, Calendar, Trash2, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Document } from '@/lib/types/document';
 import { documentsAPI } from '@/lib/api/documents';
+import { readingAPI, ReadingStatsResponse } from '@/lib/api/reading';
 import toast from 'react-hot-toast';
 
 interface DocumentCardProps {
@@ -13,8 +15,24 @@ interface DocumentCardProps {
   onDelete: () => void;
 }
 
+function formatReadingTime(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const remainingMins = minutes % 60;
+  if (hours > 0) return `${hours}h ${remainingMins}m`;
+  return `${minutes} min${minutes !== 1 ? 's' : ''}`;
+}
+
 export function DocumentCard({ document, onDelete }: DocumentCardProps) {
   const router = useRouter();
+  const [stats, setStats] = useState<ReadingStatsResponse | null>(null);
+
+  useEffect(() => {
+    readingAPI.getStats(document.id)
+      .then(setStats)
+      .catch(() => {}); // Silently fail if stats unavailable
+  }, [document.id]);
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this document?')) {
@@ -57,6 +75,13 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
           <div>{document.total_pages} pages</div>
         </div>
 
+        {stats && stats.total_seconds > 0 && (
+          <div className="mb-4 flex items-center gap-1 text-sm text-blue-600">
+            <Clock className="h-4 w-4" />
+            <span>Read: {formatReadingTime(stats.total_seconds)}</span>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button
             onClick={() => router.push(`/reader/${document.id}`)}
@@ -73,3 +98,4 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
     </Card>
   );
 }
+

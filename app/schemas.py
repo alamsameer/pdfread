@@ -129,3 +129,30 @@ class UserPreferenceUpdate(BaseModel):
 class UserPreferenceResponse(UserPreferenceBase):
     class Config:
         from_attributes = True
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+# ============ Reading Session Schemas ============
+
+class ReadingSessionCreate(BaseModel):
+    document_id: str
+
+
+class ReadingSessionResponse(BaseModel):
+    id: str
+    document_id: str
+    start_time: str
+    duration_seconds: int
+    
+    class Config:
+        from_attributes = True
+
+
+class ReadingStatsResponse(BaseModel):
+    total_seconds: int
+    total_sessions: int
+    last_session_date: Optional[str] = None

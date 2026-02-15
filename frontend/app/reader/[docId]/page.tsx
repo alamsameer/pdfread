@@ -12,6 +12,7 @@ import { useUIStore } from '@/lib/stores/useUIStore';
 import { documentsAPI } from '@/lib/api/documents';
 import { annotationsAPI } from '@/lib/api/annotations';
 import { useHighlight } from '@/lib/hooks/useHighlight';
+import { useReadingSession } from '@/lib/hooks/useReadingSession';
 import { usePreferencesStore } from '@/lib/stores/usePreferencesStore';
 import { Loader2 } from 'lucide-react';
 
@@ -26,6 +27,9 @@ export default function ReaderPage({ params }: { params: { docId: string } }) {
   const { createHighlight, updateAnnotation, deleteAnnotation } = useHighlight(docId);
   const fetchPreferences = usePreferencesStore((state) => state.fetchPreferences);
   const hasOpenedMenuRef = useRef(false);
+
+  // Track reading time
+  useReadingSession(docId);
 
   // Fetch document
   useEffect(() => {

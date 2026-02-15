@@ -343,6 +343,102 @@ def update_document(
     return doc
 
 
+# ============ Reading Session Endpoints ============
+
+@app.post("/api/reading/start", response_model=schemas.ReadingSessionResponse)
+def start_reading_session(
+    data: schemas.ReadingSessionCreate,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Start a new reading session for a document"""
+    logger.info(f"User {current_user.id} starting reading session for doc {data.document_id}")
+    
+    # Verify the document belongs to the user
+    doc = db.query(models.Document).filter(
+        models.Document.id == data.document_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    from datetime import datetime
+    
+    session = models.ReadingSession(
+        id=str(uuid.uuid4())[:8],
+        user_id=current_user.id,
+        document_id=data.document_id,
+        start_time=datetime.utcnow().isoformat(),
+        end_time=datetime.utcnow().isoformat(),
+        duration_seconds=0
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    
+    logger.info(f"Reading session {session.id} started")
+    return session
+
+
+@app.post("/api/reading/{session_id}/heartbeat", response_model=schemas.ReadingSessionResponse)
+def heartbeat_reading_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Update reading session end_time (called every ~30 seconds by frontend)"""
+    session = db.query(models.ReadingSession).filter(
+        models.ReadingSession.id == session_id,
+        models.ReadingSession.user_id == current_user.id
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Reading session not found")
+    
+    from datetime import datetime
+    
+    now = datetime.utcnow()
+    session.end_time = now.isoformat()
+    
+    # Calculate duration from start_time
+    start = datetime.fromisoformat(session.start_time)
+    session.duration_seconds = int((now - start).total_seconds())
+    
+    db.commit()
+    db.refresh(session)
+    
+    logger.info(f"Session {session_id} heartbeat: {session.duration_seconds}s elapsed")
+    return session
+
+
+@app.get("/api/documents/{doc_id}/stats", response_model=schemas.ReadingStatsResponse)
+def get_document_reading_stats(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Get aggregated reading time stats for a document"""
+    from sqlalchemy import func
+    
+    sessions = db.query(models.ReadingSession).filter(
+        models.ReadingSession.document_id == doc_id,
+        models.ReadingSession.user_id == current_user.id
+    ).all()
+    
+    total_seconds = sum(s.duration_seconds or 0 for s in sessions)
+    total_sessions = len(sessions)
+    last_session_date = sessions[-1].end_time if sessions else None
+    
+    logger.info(f"Stats for doc {doc_id}: {total_seconds}s across {total_sessions} sessions")
+    
+    return schemas.ReadingStatsResponse(
+        total_seconds=total_seconds,
+        total_sessions=total_sessions,
+        last_session_date=last_session_date
+    )
+
+
 # ============ Database Migration Helper (Dev Only) ============
 # ============ Database Migration Helper (Dev Only) ============
 @app.on_event("startup")
@@ -375,6 +471,16 @@ def ensure_db_schema():
                 logger.info("Migrating DB: Adding 'user_id' column to 'documents' table")
                 conn.execute(text("ALTER TABLE documents ADD COLUMN user_id VARCHAR"))
                 
+                
+            # Create reading_sessions table if not exists (using SQLAlchemy create_all is safer for new tables)
+            # But here we just check if we need to run create_all
+            result = conn.execute(text(
+                "SELECT to_regclass('public.reading_sessions');"
+            ))
+            if not result.fetchone()[0]:
+                logger.info("Migrating DB: Creating 'reading_sessions' table")
+                models.Base.metadata.create_all(bind=engine)
+
             conn.commit()
     except Exception as e:
         logger.warning(f"DB Migration check failed: {e}")

@@ -85,7 +85,21 @@ class Annotation(Base):
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
-    user_id = Column(String, primary_key=True, default="user")
+    user_id = Column(String, primary_key=True)
     font_size = Column(Integer, default=18)
     font_family = Column(String, default="Merriweather")
     line_height = Column(String, default="1.6")
+
+
+class ReadingSession(Base):
+    __tablename__ = "reading_sessions"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, index=True)
+    document_id = Column(String, ForeignKey("documents.id"))
+    start_time = Column(String)  # ISO8601
+    end_time = Column(String)    # ISO8601
+    duration_seconds = Column(Integer, default=0)
+
+    # Relationship
+    document = relationship("Document")
