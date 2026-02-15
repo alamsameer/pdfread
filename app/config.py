@@ -29,6 +29,12 @@ class Settings:
     # Database
     import os
     DATABASE_URL = os.getenv("DATABASE_URL")
+    
+    # Supabase Auth
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+    
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL must be set")
     if "sqlite" in DATABASE_URL:

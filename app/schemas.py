@@ -17,6 +17,7 @@ class DocumentResponse(BaseModel):
     file_path: str
     total_pages: int
     created_at: str
+    user_id: Optional[str] = None
     theme: str = "plain"
     toc: Optional[List[Any]] = None
 

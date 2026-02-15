@@ -90,46 +90,29 @@ def generate_smart_toc(doc) -> list:
 
 
 
-def parse_pdf(file_path: str, db_session: Session, doc_id: str, title: str, file_bytes: bytes = None) -> Document:
-    """
-    Parse a PDF file and store structured data in the database.
-    
-    Args:
-        file_path: Filename or virtual path
-        db_session: SQLAlchemy database session
-        doc_id: UUID for the document
-        title: Document title (usually filename)
-        file_bytes: Optional binary content of the PDF
-    
-    Returns:
-        Document record
-    """
-    logger.info(f"Parsing PDF: {title}")
-    
+def parse_pdf(file_path: str, db_session: Session, doc_id: str, title: str, file_bytes: bytes = None, user_id: str = None) -> Document:
+    # ... (code) ...
     if file_bytes:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
     else:
         doc = fitz.open(file_path)
-        # If opened from path, we might want to read bytes for DB storage if not provided?
-        # But we assume new flow provides bytes.
     
     try:
         total_pages = len(doc)
         
         # Get TOC (native or smart)
         toc_data = doc.get_toc()
-        if not toc_data:
-            logger.info("Native TOC not found. Attempting smart generation...")
-            toc_data = generate_smart_toc(doc)
+        # ...
         
         # Create document record
         doc_record = Document(
             id=doc_id,
             title=title,
-            file_path=file_path,   # This might be just the filename now
-            file_data=file_bytes,  # Store PDF bytes
+            file_path=file_path,
+            file_data=file_bytes,
             total_pages=total_pages,
             created_at=datetime.utcnow().isoformat(),
+            user_id=user_id,
             toc=toc_data
         )
         db_session.add(doc_record)

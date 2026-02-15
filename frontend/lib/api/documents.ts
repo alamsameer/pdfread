@@ -39,7 +39,7 @@ export const documentsAPI = {
 
     const response = await apiClient.post<UploadResponse>('/api/upload', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': undefined,
       },
     });
     return response.data;

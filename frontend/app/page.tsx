@@ -8,16 +8,32 @@ import { Dialog } from '@/components/ui/dialog';
 import { useUIStore } from '@/lib/stores/useUIStore';
 import { documentsAPI } from '@/lib/api/documents';
 import type { Document } from '@/lib/types/document';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { Loader2 } from 'lucide-react';
 
 export default function HomePage() {
+  const router = useRouter();
+  const { user, isLoading: isAuthLoading, initialize } = useAuthStore();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shouldRefetch, setShouldRefetch] = useState(false);
   const { isUploadModalOpen, closeUploadModal } = useUIStore();
 
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  useEffect(() => {
+    if (!isAuthLoading && !user) {
+      router.push('/login');
+    }
+  }, [isAuthLoading, user, router]);
+
   const fetchDocuments = async () => {
+    if (!user) return; // Prevent fetch if no user
+    
     setIsLoading(true);
     setError(null);
     try {
@@ -31,8 +47,10 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchDocuments();
-  }, [shouldRefetch]);
+    if (user) {
+        fetchDocuments();
+    }
+  }, [shouldRefetch, user]);
 
   const handleDocumentDeleted = () => {
     setShouldRefetch((prev) => !prev);

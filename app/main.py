@@ -95,46 +95,96 @@ def health():
 
 # ============ Document Endpoints ============
 
-@app.post("/api/upload", response_model=schemas.UploadResponse)
-async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    Upload and process a PDF file
-    """
+# @app.post("/api/upload", response_model=schemas.UploadResponse)
+# async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+#     """
+#     Upload and process a PDF file
+#     """
     # Validate file type
+from .auth import get_current_user, supabase, AuthApiError
+from pydantic import BaseModel
+
+# ============ Auth Endpoints (Proxy to Supabase) ============
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/signup")
+def signup(user: UserLogin):
+    try:
+        res = supabase.auth.sign_up({
+            "email": user.email, 
+            "password": user.password
+        })
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/login")
+def login(user: UserLogin):
+    try:
+        res = supabase.auth.sign_in_with_password({
+            "email": user.email, 
+            "password": user.password
+        })
+        return res
+    except AuthApiError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============ Document Endpoints ============
+
+@app.post("/api/upload", response_model=schemas.UploadResponse)
+async def upload_pdf(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """
+    Upload and process a PDF file (Authenticated)
+    """
+    logger.info(f"User {current_user.id} uploading file: {file.filename}")
+    
+    # ... (validation checks same as before) ...
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Check file size (approximate since we haven't read it all yet, but UploadFile has headers)
-    # Getting size from spooled file:
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
     
-    logger.info(f"Received upload: {file.filename} ({file_size} bytes)")
-    
     if file_size > settings.MAX_FILE_SIZE:
+        logger.warning(f"Upload failed: File too large ({file_size} bytes)")
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
     
-    # Generate document ID
     doc_id = str(uuid.uuid4())[:8]
-    # pdf_path = settings.PDFS_DIR / file.filename # Removed filesystem usage
     
     try:
-        # Read file content
         file_content = await file.read()
+        logger.info(f"File read successful ({len(file_content)} bytes). Parsing...")
             
-        # Parse PDF and store in database (with binaries)
-        # Note: parse_pdf is synchronous, so we run it directly. 
-        # If it blocks too long, we might want to offload to threadpool, but for now:
+        # Extract user ID safely
+        user_id = getattr(current_user, "id", None)
+        if not user_id and isinstance(current_user, dict):
+            user_id = current_user.get("id")
+            
+        if not user_id:
+            logger.error(f"Could not extract user ID from user object: {current_user}")
+            raise HTTPException(status_code=500, detail="User identification failed")
+
         doc_record = parse_pdf(
-            file_path=file.filename, # Use filename as path identifier
+            file_path=file.filename,
             db_session=db,
             doc_id=doc_id,
             title=file.filename,
-            file_bytes=file_content
+            file_bytes=file_content,
+            user_id=user_id
         )
         
-        logger.info(f"Document {doc_id} processed successfully")
+        logger.info(f"Document {doc_id} processed successfully for user {user_id}")
         
         return schemas.UploadResponse(
             status="ok",
@@ -142,24 +192,27 @@ async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)
             title=doc_record.title,
             total_pages=doc_record.total_pages
         )
-    
     except Exception as e:
-        import traceback
-        traceback.print_exc() # Print full traceback to console
         logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
-        
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 
 @app.get("/api/documents", response_model=schemas.DocumentListResponse)
-def list_documents(db: Session = Depends(get_db)):
-    """
-    List all processed documents
-    """
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """List documents owned by the user"""
+    logger.info(f"User {current_user.id} fetching document list")
     from sqlalchemy.orm import defer
-    docs = db.query(models.Document).options(
+    
+    docs = db.query(models.Document).filter(
+        models.Document.user_id == current_user.id
+    ).options(
         defer(models.Document.file_data)
     ).all()
+    
+    logger.info(f"Found {len(docs)} documents for user {current_user.id}")
     return schemas.DocumentListResponse(
         total=len(docs),
         documents=docs
@@ -167,47 +220,41 @@ def list_documents(db: Session = Depends(get_db)):
 
 
 @app.get("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-def get_document(doc_id: str, db: Session = Depends(get_db)):
-    """
-    Get document metadata
-    """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+def get_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Get document metadata (Owner only)"""
+    logger.info(f"User {current_user.id} fetching metadata for doc {doc_id}")
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
+        logger.warning(f"Document {doc_id} not found for user {current_user.id}")
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
 
 @app.get("/api/documents/{doc_id}/download")
-def download_document(doc_id: str, db: Session = Depends(get_db)):
+def download_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
     """
-    Download/View the original PDF file
+    Download/View the original PDF file (Owner only)
     """
+    logger.info(f"User {current_user.id} downloading doc {doc_id}")
     from fastapi.responses import Response
     
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
-    if not doc or not doc.file_data:
-        raise HTTPException(status_code=404, detail="Document data not found")
-        
-    # Determine filename
-    filename = (doc.title or f"{doc_id}.pdf")
-    if not filename.lower().endswith(".pdf"):
-        filename += ".pdf"
-        
-    return Response(
-        content=doc.file_data, 
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
-    )
-
-
-@app.get("/api/documents/{doc_id}/download")
-def download_document(doc_id: str, db: Session = Depends(get_db)):
-    """
-    Download/View the original PDF file
-    """
-    from fastapi.responses import Response
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
     
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
     if not doc or not doc.file_data:
         raise HTTPException(status_code=404, detail="Document data not found")
         
@@ -224,11 +271,19 @@ def download_document(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/documents/{doc_id}", response_model=schemas.StatusResponse)
-def delete_document(doc_id: str, db: Session = Depends(get_db)):
+def delete_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
     """
-    Delete a document and its associated data
+    Delete a document and its associated data (Owner only)
     """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
@@ -261,11 +316,20 @@ def delete_document(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Depends(get_db)):
+def update_document(
+    doc_id: str, 
+    data: schemas.DocumentUpdate, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
     """
-    Update document metadata (e.g. theme)
+    Update document metadata (e.g. theme) (Owner only)
     """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
@@ -302,6 +366,14 @@ def ensure_db_schema():
             if not result.fetchone():
                 logger.info("Migrating DB: Adding 'file_data' column to 'documents' table")
                 conn.execute(text("ALTER TABLE documents ADD COLUMN file_data BYTEA"))
+            
+            # Check if user_id column exists in documents
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='documents' AND column_name='user_id';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'user_id' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN user_id VARCHAR"))
                 
             conn.commit()
     except Exception as e:

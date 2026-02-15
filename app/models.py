@@ -21,6 +21,7 @@ class Document(Base):
     total_pages = Column(Integer)
     created_at = Column(String)
     theme = Column(String, default="plain")
+    user_id = Column(String, nullable=True) # Link to Supabase User
     toc = Column(JSONB, nullable=True)  # JSONB for TOC
 
     # Relationships
