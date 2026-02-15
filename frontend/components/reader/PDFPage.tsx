@@ -64,9 +64,9 @@ export function PDFPage({ docId, pageNumber, currentTheme }: PDFPageProps) {
   }
 
   return (
-    <div className="relative w-full font-serif text-lg leading-relaxed">
+    <div className="relative w-full font-serif text-base sm:text-lg leading-relaxed">
       {/* Page Content */}
-      <div className="min-h-[800px]">
+      <div className="min-h-[400px] sm:min-h-[800px]">
         {blocks.map((block) => (
           <TextBlock key={block.id} block={block} />
         ))}

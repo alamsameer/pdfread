@@ -148,32 +148,36 @@ export default function ReaderPage({ params }: { params: { docId: string } }) {
 
       {/* Sidebar */}
       {isSidebarOpen && (
-        <div className="flex h-full flex-col w-80 border-l border-gray-200 bg-white shadow-lg z-20">
-          <div className="flex border-b border-gray-200">
-             <button
-                className={`flex-1 py-3 text-sm font-medium ${activeTab === 'annotations' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setActiveTab('annotations')}
-             >
-                Annotations
-             </button>
-             <button
-                className={`flex-1 py-3 text-sm font-medium ${activeTab === 'toc' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setActiveTab('toc')}
-             >
-                Table of Contents
-             </button>
-          </div>
-          
-          <div className="flex-1 overflow-hidden">
-             {activeTab === 'annotations' ? (
-                <AnnotationPanel
-                  docId={docId}
-                  onEditAnnotation={handleEditAnnotation}
-                  onDeleteAnnotation={handleDeleteAnnotation}
-                />
-             ) : (
-                <TableOfContents />
-             )}
+        <div className="absolute md:relative inset-0 md:inset-auto z-30 md:z-20 flex">
+          {/* Backdrop on mobile */}
+          <div className="flex-1 bg-black/30 md:hidden" onClick={() => useUIStore.getState().toggleSidebar()} />
+          <div className="flex h-full flex-col w-[85vw] sm:w-80 md:w-80 border-l border-gray-200 bg-white shadow-lg ml-auto md:ml-0">
+            <div className="flex border-b border-gray-200">
+               <button
+                  className={`flex-1 py-3 text-sm font-medium ${activeTab === 'annotations' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setActiveTab('annotations')}
+               >
+                  Annotations
+               </button>
+               <button
+                  className={`flex-1 py-3 text-sm font-medium ${activeTab === 'toc' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setActiveTab('toc')}
+               >
+                  Table of Contents
+               </button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden">
+               {activeTab === 'annotations' ? (
+                  <AnnotationPanel
+                    docId={docId}
+                    onEditAnnotation={handleEditAnnotation}
+                    onDeleteAnnotation={handleDeleteAnnotation}
+                  />
+               ) : (
+                  <TableOfContents />
+               )}
+            </div>
           </div>
         </div>
       )}

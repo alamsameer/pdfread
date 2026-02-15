@@ -270,6 +270,45 @@ def download_document(
     )
 
 
+@app.get("/api/documents/{doc_id}/thumbnail")
+def get_document_thumbnail(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Generate a thumbnail of the first page of the PDF"""
+    from fastapi.responses import Response
+    import fitz
+    
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
+    if not doc or not doc.file_data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    try:
+        pdf = fitz.open(stream=doc.file_data, filetype="pdf")
+        page = pdf[0]  # First page
+        
+        # Render at 2x for good quality thumbnails
+        mat = fitz.Matrix(2.0, 2.0)
+        pix = page.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        pdf.close()
+        
+        logger.info(f"Generated thumbnail for doc {doc_id}")
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
+    except Exception as e:
+        logger.error(f"Thumbnail generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
+
+
 @app.delete("/api/documents/{doc_id}", response_model=schemas.StatusResponse)
 def delete_document(
     doc_id: str, 
