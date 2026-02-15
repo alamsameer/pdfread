@@ -2,7 +2,7 @@
 PDF Reader Backend API
 FastAPI application for processing PDF files with PyMuPDF
 """
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +50,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Log only API requests to reduce noise, or all? User asked for "api endpoint"
+    # Let's log all for now but prefix clearly
+    if request.url.path.startswith("/api"):
+        logger.info(f"👉 API Hit: {request.method} {request.url.path}")
+    response = await call_next(request)
+    return response
+
 # Ensure directories exist
 settings.PDFS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -87,7 +96,7 @@ def health():
 # ============ Document Endpoints ============
 
 @app.post("/api/upload", response_model=schemas.UploadResponse)
-def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Upload and process a PDF file
     """
@@ -95,7 +104,8 @@ def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Check file size
+    # Check file size (approximate since we haven't read it all yet, but UploadFile has headers)
+    # Getting size from spooled file:
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -105,22 +115,23 @@ def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if file_size > settings.MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
     
-    # Generate document ID and save file
+    # Generate document ID
     doc_id = str(uuid.uuid4())[:8]
-    pdf_path = settings.PDFS_DIR / file.filename
+    # pdf_path = settings.PDFS_DIR / file.filename # Removed filesystem usage
     
     try:
-        # Save uploaded file
-        with open(pdf_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"File saved to {pdf_path}")
-        
-        # Parse PDF and store in database
+        # Read file content
+        file_content = await file.read()
+            
+        # Parse PDF and store in database (with binaries)
+        # Note: parse_pdf is synchronous, so we run it directly. 
+        # If it blocks too long, we might want to offload to threadpool, but for now:
         doc_record = parse_pdf(
-            file_path=str(pdf_path),
+            file_path=file.filename, # Use filename as path identifier
             db_session=db,
             doc_id=doc_id,
-            title=file.filename
+            title=file.filename,
+            file_bytes=file_content
         )
         
         logger.info(f"Document {doc_id} processed successfully")
@@ -133,10 +144,10 @@ def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
         )
     
     except Exception as e:
-        # Cleanup on failure
-        if pdf_path.exists():
-            pdf_path.unlink()
+        import traceback
+        traceback.print_exc() # Print full traceback to console
         logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
+        
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 
@@ -145,7 +156,10 @@ def list_documents(db: Session = Depends(get_db)):
     """
     List all processed documents
     """
-    docs = db.query(models.Document).all()
+    from sqlalchemy.orm import defer
+    docs = db.query(models.Document).options(
+        defer(models.Document.file_data)
+    ).all()
     return schemas.DocumentListResponse(
         total=len(docs),
         documents=docs
@@ -163,6 +177,52 @@ def get_document(doc_id: str, db: Session = Depends(get_db)):
     return doc
 
 
+@app.get("/api/documents/{doc_id}/download")
+def download_document(doc_id: str, db: Session = Depends(get_db)):
+    """
+    Download/View the original PDF file
+    """
+    from fastapi.responses import Response
+    
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc or not doc.file_data:
+        raise HTTPException(status_code=404, detail="Document data not found")
+        
+    # Determine filename
+    filename = (doc.title or f"{doc_id}.pdf")
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+        
+    return Response(
+        content=doc.file_data, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+    )
+
+
+@app.get("/api/documents/{doc_id}/download")
+def download_document(doc_id: str, db: Session = Depends(get_db)):
+    """
+    Download/View the original PDF file
+    """
+    from fastapi.responses import Response
+    
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc or not doc.file_data:
+        raise HTTPException(status_code=404, detail="Document data not found")
+        
+    # Determine filename
+    filename = (doc.title or f"{doc_id}.pdf")
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+        
+    return Response(
+        content=doc.file_data, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+    )
+
+
 @app.delete("/api/documents/{doc_id}", response_model=schemas.StatusResponse)
 def delete_document(doc_id: str, db: Session = Depends(get_db)):
     """
@@ -172,14 +232,28 @@ def delete_document(doc_id: str, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Delete PDF file
-    pdf_path = Path(doc.file_path)
-    if pdf_path.exists():
-        pdf_path.unlink()
+    # Delete PDF file - No longer needed as file is in DB
+    # if doc.file_path and Path(doc.file_path).exists():
+    #     try:
+    #         Path(doc.file_path).unlink()
+    #     except Exception:
+    #         pass # Ignore errors if file doesn't exist
     
-    # Delete from database (cascade deletes blocks and annotations)
-    db.delete(doc)
-    db.commit()
+    # Explicitly delete dependent records to ensure cleanup
+    try:
+        # 1. Delete Annotations
+        db.query(models.Annotation).filter(models.Annotation.doc_id == doc_id).delete()
+        
+        # 2. Delete Blocks
+        db.query(models.Block).filter(models.Block.doc_id == doc_id).delete()
+        
+        # 3. Delete Document
+        db.delete(doc)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting document {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
     
     logger.info(f"Document {doc_id} deleted")
     
@@ -206,25 +280,52 @@ def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Dep
 
 
 # ============ Database Migration Helper (Dev Only) ============
+# ============ Database Migration Helper (Dev Only) ============
 @app.on_event("startup")
 def ensure_db_schema():
-    """Ensure new columns exist in SQLite"""
+    """Ensure new columns exist in Postgres (Simple manual migration)"""
     try:
         with engine.connect() as conn:
-            # Check if theme column exists
-            result = conn.execute(text("PRAGMA table_info(documents)"))
-            columns = [row.name for row in result]
-            if "theme" not in columns:
-                logger.info("Migrating DB: Adding 'theme' column to 'documents' table")
-                conn.execute(text("ALTER TABLE documents ADD COLUMN theme TEXT DEFAULT 'plain'"))
+            # Check if image_data column exists in blocks
+            # Postgres specific query
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='blocks' AND column_name='image_data';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'image_data' column to 'blocks' table")
+                conn.execute(text("ALTER TABLE blocks ADD COLUMN image_data BYTEA"))
             
-            if "toc" not in columns:
-                logger.info("Migrating DB: Adding 'toc' column to 'documents' table")
-                conn.execute(text("ALTER TABLE documents ADD COLUMN toc TEXT"))
+            # Check if file_data column exists in documents
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='documents' AND column_name='file_data';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'file_data' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN file_data BYTEA"))
                 
             conn.commit()
     except Exception as e:
         logger.warning(f"DB Migration check failed: {e}")
+
+# ============ Image Endpoint ============
+
+@app.get("/api/images/{block_id}")
+def get_image(block_id: str, db: Session = Depends(get_db)):
+    """
+    Serve image directly from database
+    """
+    block = db.query(models.Block).filter(models.Block.id == block_id).first()
+    if not block:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    if not block.image_data:
+        # Fallback to file system if path exists but no data in DB (legacy)
+        # But user asked to remove local files. 
+        # For new system, we expect data in DB.
+        raise HTTPException(status_code=404, detail="Image data not found")
+
+    from fastapi.responses import Response
+    return Response(content=block.image_data, media_type="image/png")
 
 
 # ============ Block Endpoints ============
@@ -283,12 +384,10 @@ def split_block(
         raise HTTPException(status_code=404, detail="Block not found")
         
     # 2. Parse metadata
-    try:
-        words = json.loads(block.words_meta) if block.words_meta else []
-        styles = block.style_runs 
-        pos = block.position_meta
-    except json.JSONDecodeError:
-        words = []
+    # With JSONB, these are already Python objects (lists/dicts)
+    words = block.words_meta if block.words_meta else []
+    styles = block.style_runs 
+    pos = block.position_meta
 
     split_idx = data.split_index
     
@@ -319,14 +418,14 @@ def split_block(
         text=text_2,
         block_type=block.block_type,
         image_path=block.image_path,
-        words_meta=json.dumps(words_2),
+        words_meta=words_2,
         style_runs=styles,
         position_meta=pos
     )
     
     # 6. Update old block
     block.text = text_1
-    block.words_meta = json.dumps(words_1)
+    block.words_meta = words_1
     
     db.add(new_block)
     db.commit()

@@ -2,6 +2,9 @@
 Configuration settings for PDF Reader Backend
 """
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Settings:
@@ -22,6 +25,14 @@ class Settings:
     # Server settings
     HOST = "0.0.0.0"
     PORT = 8000
+    
+    # Database
+    import os
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL must be set")
+    if "sqlite" in DATABASE_URL:
+        raise ValueError("SQLite is no longer supported. Please use PostgreSQL/Supabase.")
 
 
 settings = Settings()

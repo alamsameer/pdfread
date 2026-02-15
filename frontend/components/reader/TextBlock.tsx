@@ -53,17 +53,26 @@ export function TextBlock({ block }: TextBlockProps) {
   }, [selection.blockId, selection.startTokenId, selection.endTokenId, block.id]);
 
   if (block.block_type === 'image') {
-    const imageUrl = block.image_path?.startsWith('http') 
-        ? block.image_path 
-        : `${API_BASE_URL}${block.image_path}`;
+    // Construct full URL if it's a relative path from our API
+    let imageUrl = block.image_path;
+    if (imageUrl && !imageUrl.startsWith('http')) {
+        // If it starts with /, append to base url. 
+        // Note: API_BASE_URL might or might not have trailing slash.
+        // Assuming API_BASE_URL is like 'http://localhost:8000'
+        imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${imageUrl}`;
+    }
 
     return (
       <div className="my-4 flex justify-center">
-        <img
-          src={imageUrl}
-          alt={`Block ${block.block_order}`}
-          className="max-w-full h-auto"
-        />
+        {imageUrl ? (
+            <img
+            src={imageUrl}
+            alt={`Block ${block.block_order}`}
+            className="max-w-full h-auto"
+            />
+        ) : (
+            <div className="text-gray-400">Image not found</div>
+        )}
       </div>
     );
   }

@@ -18,7 +18,7 @@ class DocumentResponse(BaseModel):
     total_pages: int
     created_at: str
     theme: str = "plain"
-    toc: Optional[str] = None
+    toc: Optional[List[Any]] = None
 
     class Config:
         from_attributes = True
@@ -44,9 +44,9 @@ class BlockResponse(BaseModel):
     text: Optional[str] = None
     block_type: str
     image_path: Optional[str] = None
-    words_meta: str      # JSON string
-    style_runs: str      # JSON string
-    position_meta: str   # JSON string
+    words_meta: List[Any]      # JSON object
+    style_runs: List[Any]      # JSON object
+    position_meta: List[Any]   # JSON object
 
     class Config:
         from_attributes = True

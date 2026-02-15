@@ -2,21 +2,26 @@
 SQLAlchemy ORM Models
 Schema designed to be migration-compatible with Postgres
 """
-from sqlalchemy import Column, String, Integer, Text, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import TypeDecorator, Text, LargeBinary
+from sqlalchemy import Column, String, Integer, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from .database import Base
+import json
 
+from sqlalchemy.dialects.postgresql import JSONB
 
 class Document(Base):
     __tablename__ = "documents"
 
     id = Column(String, primary_key=True)
     title = Column(String)
-    file_path = Column(String)
+    file_path = Column(String) # Store filename
+    file_data = Column(LargeBinary, nullable=True) # Store PDF bytes
     total_pages = Column(Integer)
     created_at = Column(String)
     theme = Column(String, default="plain")
-    toc = Column(Text, nullable=True)  # JSON string of table of contents
+    toc = Column(JSONB, nullable=True)  # JSONB for TOC
 
     # Relationships
     blocks = relationship("Block", back_populates="document", cascade="all, delete-orphan")
@@ -34,10 +39,11 @@ class Block(Base):
     text = Column(Text, nullable=True)
     block_type = Column(String, default="text") # text, image
     image_path = Column(String, nullable=True)
+    image_data = Column(LargeBinary, nullable=True) # Store image bytes directly
     
-    words_meta = Column(Text)      # JSON string: [{start, end}, ...]
-    style_runs = Column(Text)      # JSON string: [{start, end, fontSize, font}, ...]
-    position_meta = Column(Text)   # JSON string: [x0, y0, x1, y1] bbox
+    words_meta = Column(JSONB)      # JSONB: [{start, end}, ...]
+    style_runs = Column(JSONB)      # JSONB: [{start, end, fontSize, font}, ...]
+    position_meta = Column(JSONB)   # JSONB: [x0, y0, x1, y1] bbox
 
     # Relationships
     document = relationship("Document", back_populates="blocks")

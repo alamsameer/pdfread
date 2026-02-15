@@ -5,7 +5,7 @@ export interface Document {
   total_pages: number;
   created_at: string;
   theme?: string;
-  toc?: string; // JSON string
+  toc?: any[]; // JSON object
 }
 
 export interface DocumentListResponse {
