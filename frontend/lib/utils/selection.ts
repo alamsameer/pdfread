@@ -1,33 +1,43 @@
 import type { WordMeta, Block } from '@/lib/types/block';
 
 // Parse words_meta JSON string
-export function parseWordsMeta(wordsMetaStr: string): WordMeta[] {
-  try {
-    const parsed = JSON.parse(wordsMetaStr);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+// Parse words_meta JSON string (or object)
+export function parseWordsMeta(wordsMeta: WordMeta[] | string): WordMeta[] {
+  if (typeof wordsMeta === 'string') {
+    try {
+      const parsed = JSON.parse(wordsMeta);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
+  return wordsMeta || [];
 }
 
-// Parse style_runs JSON string
-export function parseStyleRuns(styleRunsStr: string) {
-  try {
-    const parsed = JSON.parse(styleRunsStr);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+// Parse style_runs JSON string (or object)
+export function parseStyleRuns(styleRuns: any[] | string) {
+  if (typeof styleRuns === 'string') {
+    try {
+      const parsed = JSON.parse(styleRuns);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
+  return styleRuns || [];
 }
 
-// Parse position_meta JSON string
-export function parsePositionMeta(positionMetaStr: string): [number, number, number, number] {
-  try {
-    const parsed = JSON.parse(positionMetaStr);
-    return Array.isArray(parsed) && parsed.length === 4 ? parsed as [number, number, number, number] : [0, 0, 0, 0];
-  } catch {
-    return [0, 0, 0, 0];
+// Parse position_meta JSON string (or object)
+export function parsePositionMeta(positionMeta: [number, number, number, number] | string): [number, number, number, number] {
+  if (typeof positionMeta === 'string') {
+    try {
+      const parsed = JSON.parse(positionMeta);
+      return Array.isArray(parsed) && parsed.length === 4 ? parsed as [number, number, number, number] : [0, 0, 0, 0];
+    } catch {
+      return [0, 0, 0, 0];
+    }
   }
+  return positionMeta || [0, 0, 0, 0];
 }
 
 // Check if a token index is within an annotation range

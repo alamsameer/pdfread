@@ -30,9 +30,9 @@ export interface Block {
   block_type: 'text' | 'image';
   text?: string;
   image_path?: string;
-  words_meta: string; // JSON string of WordMeta[]
-  style_runs: string; // JSON string of StyleRun[]
-  position_meta: string; // JSON string [x0, y0, x1, y1]
+  words_meta: WordMeta[]; // JSON object
+  style_runs: StyleRun[]; // JSON object
+  position_meta: [number, number, number, number]; // JSON object
 }
 
 export interface ParsedBlock extends Block {

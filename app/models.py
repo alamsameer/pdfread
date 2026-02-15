@@ -2,21 +2,27 @@
 SQLAlchemy ORM Models
 Schema designed to be migration-compatible with Postgres
 """
-from sqlalchemy import Column, String, Integer, Text, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import TypeDecorator, Text, LargeBinary
+from sqlalchemy import Column, String, Integer, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from .database import Base
+import json
 
+from sqlalchemy.dialects.postgresql import JSONB
 
 class Document(Base):
     __tablename__ = "documents"
 
     id = Column(String, primary_key=True)
     title = Column(String)
-    file_path = Column(String)
+    file_path = Column(String) # Store filename
+    file_data = Column(LargeBinary, nullable=True) # Store PDF bytes
     total_pages = Column(Integer)
     created_at = Column(String)
     theme = Column(String, default="plain")
-    toc = Column(Text, nullable=True)  # JSON string of table of contents
+    user_id = Column(String, nullable=True) # Link to Supabase User
+    toc = Column(JSONB, nullable=True)  # JSONB for TOC
 
     # Relationships
     blocks = relationship("Block", back_populates="document", cascade="all, delete-orphan")
@@ -34,10 +40,11 @@ class Block(Base):
     text = Column(Text, nullable=True)
     block_type = Column(String, default="text") # text, image
     image_path = Column(String, nullable=True)
+    image_data = Column(LargeBinary, nullable=True) # Store image bytes directly
     
-    words_meta = Column(Text)      # JSON string: [{start, end}, ...]
-    style_runs = Column(Text)      # JSON string: [{start, end, fontSize, font}, ...]
-    position_meta = Column(Text)   # JSON string: [x0, y0, x1, y1] bbox
+    words_meta = Column(JSONB)      # JSONB: [{start, end}, ...]
+    style_runs = Column(JSONB)      # JSONB: [{start, end, fontSize, font}, ...]
+    position_meta = Column(JSONB)   # JSONB: [x0, y0, x1, y1] bbox
 
     # Relationships
     document = relationship("Document", back_populates="blocks")
@@ -78,7 +85,21 @@ class Annotation(Base):
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
-    user_id = Column(String, primary_key=True, default="user")
+    user_id = Column(String, primary_key=True)
     font_size = Column(Integer, default=18)
     font_family = Column(String, default="Merriweather")
     line_height = Column(String, default="1.6")
+
+
+class ReadingSession(Base):
+    __tablename__ = "reading_sessions"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, index=True)
+    document_id = Column(String, ForeignKey("documents.id"))
+    start_time = Column(String)  # ISO8601
+    end_time = Column(String)    # ISO8601
+    duration_seconds = Column(Integer, default=0)
+
+    # Relationship
+    document = relationship("Document")

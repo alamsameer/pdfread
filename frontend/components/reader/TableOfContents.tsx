@@ -27,7 +27,10 @@ export function TableOfContents() {
   try {
     // PyMuPDF get_toc returns [[lvl, title, page, dest], ...]
     // We only care about level, title, page
-    const parsedToc = JSON.parse(currentDocument.toc);
+    // PyMuPDF get_toc returns [[lvl, title, page, dest], ...]
+    // We only care about level, title, page
+    // TOC is now an object, no need to parse
+    const parsedToc = currentDocument.toc;
     tocItems = parsedToc.map((item: any) => ({
       level: item[0],
       title: item[1],

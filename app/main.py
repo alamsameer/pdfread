@@ -2,7 +2,7 @@
 PDF Reader Backend API
 FastAPI application for processing PDF files with PyMuPDF
 """
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +50,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Log only API requests to reduce noise, or all? User asked for "api endpoint"
+    # Let's log all for now but prefix clearly
+    if request.url.path.startswith("/api"):
+        logger.info(f"👉 API Hit: {request.method} {request.url.path}")
+    response = await call_next(request)
+    return response
+
 # Ensure directories exist
 settings.PDFS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -86,44 +95,96 @@ def health():
 
 # ============ Document Endpoints ============
 
-@app.post("/api/upload", response_model=schemas.UploadResponse)
-def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    Upload and process a PDF file
-    """
+# @app.post("/api/upload", response_model=schemas.UploadResponse)
+# async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+#     """
+#     Upload and process a PDF file
+#     """
     # Validate file type
+from .auth import get_current_user, supabase, AuthApiError
+from pydantic import BaseModel
+
+# ============ Auth Endpoints (Proxy to Supabase) ============
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/signup")
+def signup(user: UserLogin):
+    try:
+        res = supabase.auth.sign_up({
+            "email": user.email, 
+            "password": user.password
+        })
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/login")
+def login(user: UserLogin):
+    try:
+        res = supabase.auth.sign_in_with_password({
+            "email": user.email, 
+            "password": user.password
+        })
+        return res
+    except AuthApiError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============ Document Endpoints ============
+
+@app.post("/api/upload", response_model=schemas.UploadResponse)
+async def upload_pdf(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """
+    Upload and process a PDF file (Authenticated)
+    """
+    logger.info(f"User {current_user.id} uploading file: {file.filename}")
+    
+    # ... (validation checks same as before) ...
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Check file size
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
     
-    logger.info(f"Received upload: {file.filename} ({file_size} bytes)")
-    
     if file_size > settings.MAX_FILE_SIZE:
+        logger.warning(f"Upload failed: File too large ({file_size} bytes)")
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
     
-    # Generate document ID and save file
     doc_id = str(uuid.uuid4())[:8]
-    pdf_path = settings.PDFS_DIR / file.filename
     
     try:
-        # Save uploaded file
-        with open(pdf_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"File saved to {pdf_path}")
-        
-        # Parse PDF and store in database
+        file_content = await file.read()
+        logger.info(f"File read successful ({len(file_content)} bytes). Parsing...")
+            
+        # Extract user ID safely
+        user_id = getattr(current_user, "id", None)
+        if not user_id and isinstance(current_user, dict):
+            user_id = current_user.get("id")
+            
+        if not user_id:
+            logger.error(f"Could not extract user ID from user object: {current_user}")
+            raise HTTPException(status_code=500, detail="User identification failed")
+
         doc_record = parse_pdf(
-            file_path=str(pdf_path),
+            file_path=file.filename,
             db_session=db,
             doc_id=doc_id,
-            title=file.filename
+            title=file.filename,
+            file_bytes=file_content,
+            user_id=user_id
         )
         
-        logger.info(f"Document {doc_id} processed successfully")
+        logger.info(f"Document {doc_id} processed successfully for user {user_id}")
         
         return schemas.UploadResponse(
             status="ok",
@@ -131,21 +192,27 @@ def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
             title=doc_record.title,
             total_pages=doc_record.total_pages
         )
-    
     except Exception as e:
-        # Cleanup on failure
-        if pdf_path.exists():
-            pdf_path.unlink()
         logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 
 @app.get("/api/documents", response_model=schemas.DocumentListResponse)
-def list_documents(db: Session = Depends(get_db)):
-    """
-    List all processed documents
-    """
-    docs = db.query(models.Document).all()
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """List documents owned by the user"""
+    logger.info(f"User {current_user.id} fetching document list")
+    from sqlalchemy.orm import defer
+    
+    docs = db.query(models.Document).filter(
+        models.Document.user_id == current_user.id
+    ).options(
+        defer(models.Document.file_data)
+    ).all()
+    
+    logger.info(f"Found {len(docs)} documents for user {current_user.id}")
     return schemas.DocumentListResponse(
         total=len(docs),
         documents=docs
@@ -153,33 +220,134 @@ def list_documents(db: Session = Depends(get_db)):
 
 
 @app.get("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-def get_document(doc_id: str, db: Session = Depends(get_db)):
-    """
-    Get document metadata
-    """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+def get_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Get document metadata (Owner only)"""
+    logger.info(f"User {current_user.id} fetching metadata for doc {doc_id}")
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
+        logger.warning(f"Document {doc_id} not found for user {current_user.id}")
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
 
+@app.get("/api/documents/{doc_id}/download")
+def download_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """
+    Download/View the original PDF file (Owner only)
+    """
+    logger.info(f"User {current_user.id} downloading doc {doc_id}")
+    from fastapi.responses import Response
+    
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
+    if not doc or not doc.file_data:
+        raise HTTPException(status_code=404, detail="Document data not found")
+        
+    # Determine filename
+    filename = (doc.title or f"{doc_id}.pdf")
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+        
+    return Response(
+        content=doc.file_data, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+    )
+
+
+@app.get("/api/documents/{doc_id}/thumbnail")
+def get_document_thumbnail(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Generate a thumbnail of the first page of the PDF"""
+    from fastapi.responses import Response
+    import fitz
+    
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
+    if not doc or not doc.file_data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    try:
+        pdf = fitz.open(stream=doc.file_data, filetype="pdf")
+        page = pdf[0]  # First page
+        
+        # Render at 2x for good quality thumbnails
+        mat = fitz.Matrix(2.0, 2.0)
+        pix = page.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        pdf.close()
+        
+        logger.info(f"Generated thumbnail for doc {doc_id}")
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
+    except Exception as e:
+        logger.error(f"Thumbnail generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
+
+
 @app.delete("/api/documents/{doc_id}", response_model=schemas.StatusResponse)
-def delete_document(doc_id: str, db: Session = Depends(get_db)):
+def delete_document(
+    doc_id: str, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
     """
-    Delete a document and its associated data
+    Delete a document and its associated data (Owner only)
     """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Delete PDF file
-    pdf_path = Path(doc.file_path)
-    if pdf_path.exists():
-        pdf_path.unlink()
+    # Delete PDF file - No longer needed as file is in DB
+    # if doc.file_path and Path(doc.file_path).exists():
+    #     try:
+    #         Path(doc.file_path).unlink()
+    #     except Exception:
+    #         pass # Ignore errors if file doesn't exist
     
-    # Delete from database (cascade deletes blocks and annotations)
-    db.delete(doc)
-    db.commit()
+    # Explicitly delete dependent records to ensure cleanup
+    try:
+        # 1. Delete Annotations
+        db.query(models.Annotation).filter(models.Annotation.doc_id == doc_id).delete()
+        
+        # 2. Delete Blocks
+        db.query(models.Block).filter(models.Block.doc_id == doc_id).delete()
+        
+        # 3. Delete Document
+        db.delete(doc)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting document {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
     
     logger.info(f"Document {doc_id} deleted")
     
@@ -187,11 +355,20 @@ def delete_document(doc_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/documents/{doc_id}", response_model=schemas.DocumentResponse)
-def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Depends(get_db)):
+def update_document(
+    doc_id: str, 
+    data: schemas.DocumentUpdate, 
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
     """
-    Update document metadata (e.g. theme)
+    Update document metadata (e.g. theme) (Owner only)
     """
-    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    doc = db.query(models.Document).filter(
+        models.Document.id == doc_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
@@ -205,26 +382,167 @@ def update_document(doc_id: str, data: schemas.DocumentUpdate, db: Session = Dep
     return doc
 
 
+# ============ Reading Session Endpoints ============
+
+@app.post("/api/reading/start", response_model=schemas.ReadingSessionResponse)
+def start_reading_session(
+    data: schemas.ReadingSessionCreate,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Start a new reading session for a document"""
+    logger.info(f"User {current_user.id} starting reading session for doc {data.document_id}")
+    
+    # Verify the document belongs to the user
+    doc = db.query(models.Document).filter(
+        models.Document.id == data.document_id,
+        models.Document.user_id == current_user.id
+    ).first()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    from datetime import datetime
+    
+    session = models.ReadingSession(
+        id=str(uuid.uuid4())[:8],
+        user_id=current_user.id,
+        document_id=data.document_id,
+        start_time=datetime.utcnow().isoformat(),
+        end_time=datetime.utcnow().isoformat(),
+        duration_seconds=0
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    
+    logger.info(f"Reading session {session.id} started")
+    return session
+
+
+@app.post("/api/reading/{session_id}/heartbeat", response_model=schemas.ReadingSessionResponse)
+def heartbeat_reading_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Update reading session end_time (called every ~30 seconds by frontend)"""
+    session = db.query(models.ReadingSession).filter(
+        models.ReadingSession.id == session_id,
+        models.ReadingSession.user_id == current_user.id
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Reading session not found")
+    
+    from datetime import datetime
+    
+    now = datetime.utcnow()
+    session.end_time = now.isoformat()
+    
+    # Calculate duration from start_time
+    start = datetime.fromisoformat(session.start_time)
+    session.duration_seconds = int((now - start).total_seconds())
+    
+    db.commit()
+    db.refresh(session)
+    
+    logger.info(f"Session {session_id} heartbeat: {session.duration_seconds}s elapsed")
+    return session
+
+
+@app.get("/api/documents/{doc_id}/stats", response_model=schemas.ReadingStatsResponse)
+def get_document_reading_stats(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Get aggregated reading time stats for a document"""
+    from sqlalchemy import func
+    
+    sessions = db.query(models.ReadingSession).filter(
+        models.ReadingSession.document_id == doc_id,
+        models.ReadingSession.user_id == current_user.id
+    ).all()
+    
+    total_seconds = sum(s.duration_seconds or 0 for s in sessions)
+    total_sessions = len(sessions)
+    last_session_date = sessions[-1].end_time if sessions else None
+    
+    logger.info(f"Stats for doc {doc_id}: {total_seconds}s across {total_sessions} sessions")
+    
+    return schemas.ReadingStatsResponse(
+        total_seconds=total_seconds,
+        total_sessions=total_sessions,
+        last_session_date=last_session_date
+    )
+
+
+# ============ Database Migration Helper (Dev Only) ============
 # ============ Database Migration Helper (Dev Only) ============
 @app.on_event("startup")
 def ensure_db_schema():
-    """Ensure new columns exist in SQLite"""
+    """Ensure new columns exist in Postgres (Simple manual migration)"""
     try:
         with engine.connect() as conn:
-            # Check if theme column exists
-            result = conn.execute(text("PRAGMA table_info(documents)"))
-            columns = [row.name for row in result]
-            if "theme" not in columns:
-                logger.info("Migrating DB: Adding 'theme' column to 'documents' table")
-                conn.execute(text("ALTER TABLE documents ADD COLUMN theme TEXT DEFAULT 'plain'"))
+            # Check if image_data column exists in blocks
+            # Postgres specific query
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='blocks' AND column_name='image_data';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'image_data' column to 'blocks' table")
+                conn.execute(text("ALTER TABLE blocks ADD COLUMN image_data BYTEA"))
             
-            if "toc" not in columns:
-                logger.info("Migrating DB: Adding 'toc' column to 'documents' table")
-                conn.execute(text("ALTER TABLE documents ADD COLUMN toc TEXT"))
+            # Check if file_data column exists in documents
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='documents' AND column_name='file_data';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'file_data' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN file_data BYTEA"))
+            
+            # Check if user_id column exists in documents
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='documents' AND column_name='user_id';"
+            ))
+            if not result.fetchone():
+                logger.info("Migrating DB: Adding 'user_id' column to 'documents' table")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN user_id VARCHAR"))
                 
+                
+            # Create reading_sessions table if not exists (using SQLAlchemy create_all is safer for new tables)
+            # But here we just check if we need to run create_all
+            result = conn.execute(text(
+                "SELECT to_regclass('public.reading_sessions');"
+            ))
+            if not result.fetchone()[0]:
+                logger.info("Migrating DB: Creating 'reading_sessions' table")
+                models.Base.metadata.create_all(bind=engine)
+
             conn.commit()
     except Exception as e:
         logger.warning(f"DB Migration check failed: {e}")
+
+# ============ Image Endpoint ============
+
+@app.get("/api/images/{block_id}")
+def get_image(block_id: str, db: Session = Depends(get_db)):
+    """
+    Serve image directly from database
+    """
+    block = db.query(models.Block).filter(models.Block.id == block_id).first()
+    if not block:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    if not block.image_data:
+        # Fallback to file system if path exists but no data in DB (legacy)
+        # But user asked to remove local files. 
+        # For new system, we expect data in DB.
+        raise HTTPException(status_code=404, detail="Image data not found")
+
+    from fastapi.responses import Response
+    return Response(content=block.image_data, media_type="image/png")
 
 
 # ============ Block Endpoints ============
@@ -283,12 +601,10 @@ def split_block(
         raise HTTPException(status_code=404, detail="Block not found")
         
     # 2. Parse metadata
-    try:
-        words = json.loads(block.words_meta) if block.words_meta else []
-        styles = block.style_runs 
-        pos = block.position_meta
-    except json.JSONDecodeError:
-        words = []
+    # With JSONB, these are already Python objects (lists/dicts)
+    words = block.words_meta if block.words_meta else []
+    styles = block.style_runs 
+    pos = block.position_meta
 
     split_idx = data.split_index
     
@@ -319,14 +635,14 @@ def split_block(
         text=text_2,
         block_type=block.block_type,
         image_path=block.image_path,
-        words_meta=json.dumps(words_2),
+        words_meta=words_2,
         style_runs=styles,
         position_meta=pos
     )
     
     # 6. Update old block
     block.text = text_1
-    block.words_meta = json.dumps(words_1)
+    block.words_meta = words_1
     
     db.add(new_block)
     db.commit()
