@@ -3,9 +3,7 @@ PDF Reader Backend API
 FastAPI application for processing PDF files with PyMuPDF
 """
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import shutil
 import uuid
@@ -62,29 +60,13 @@ async def log_requests(request: Request, call_next):
 # Ensure directories exist
 settings.PDFS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=str(settings.STATIC_DIR)), name="static")
-
 
 # ============ Root & Health ============
 
 @app.get("/")
 def root():
-    """Redirect to dashboard"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/dashboard")
-
-
-@app.get("/dashboard")
-def dashboard_page():
-    """Serve the dashboard interface"""
-    return FileResponse(settings.STATIC_DIR / "dashboard.html")
-
-
-@app.get("/reader/{doc_id}")
-def reader_page(doc_id: str):
-    """Serve the reader interface"""
-    return FileResponse(settings.STATIC_DIR / "reader.html")
+    """API root"""
+    return {"message": "PDF Reader API", "version": "3.0.0"}
 
 
 @app.get("/health")
