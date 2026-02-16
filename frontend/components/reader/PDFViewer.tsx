@@ -112,8 +112,8 @@ export function PDFViewer({ docId }: PDFViewerProps) {
         onPageChange={setCurrentPage}
       />
 
-      <div className={`flex-1 overflow-y-auto transition-colors duration-300 ${themeClass}`}>
-        <div className="mx-auto max-w-3xl px-5 sm:px-8 py-6 sm:py-12">
+      <div className={`flex-1 w-full h-full overflow-y-auto overflow-x-hidden transition-colors duration-300 ${themeClass}`}>
+        <div className="mx-auto max-w-3xl w-full px-3 sm:px-8 py-4 sm:py-12">
           {visiblePages.map((pageNum) => (
             <div key={pageNum} id={`page-${pageNum}`}>
               <PDFPage docId={docId} pageNumber={pageNum} currentTheme={currentDocument.theme || 'plain'} />

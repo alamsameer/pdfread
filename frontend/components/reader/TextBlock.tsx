@@ -80,7 +80,7 @@ export function TextBlock({ block }: TextBlockProps) {
   return (
     <div
       data-block-id={block.id}
-      className="mb-4 leading-relaxed"
+      className="mb-4 leading-relaxed break-word-common w-full max-w-full"
       style={{
         fontSize: `${font_size}px`,
         fontFamily: font_family,

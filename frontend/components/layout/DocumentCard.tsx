@@ -113,7 +113,7 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
       )}
 
       {/* Top Actions Bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-3 opacity-100 sm:opacity-0 transition-opacity duration-200 sm:group-hover:opacity-100">
         <div className="flex items-center gap-1.5">
           {stats && stats.total_seconds > 0 && (
             <span

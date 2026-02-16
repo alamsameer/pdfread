@@ -19,11 +19,27 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  /* Prevent body scroll, handle in app */
+}
+
+html {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .break-word-common {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
   }
 }
 
