@@ -149,7 +149,7 @@ export function HighlightMenu() {
       )}
       style={{
         top: `${menuPosition.y}px`,
-        left: `${menuPosition.x}px`,
+        left: `${Math.min(window.innerWidth - 300, Math.max(10, menuPosition.x))}px`, // Prevent overflow
       }}
       onClick={(e) => e.stopPropagation()}
     >

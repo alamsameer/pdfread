@@ -47,6 +47,7 @@ export function ReaderToolbar({
         )}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onClick={() => setIsHovered(!isHovered)} // Toggle on click/tap
       >
         {/* Core Controls (Always Visible) */}
         <div className="flex items-center gap-1">
