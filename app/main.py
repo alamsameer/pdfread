@@ -530,18 +530,29 @@ def get_image(block_id: str, db: Session = Depends(get_db)):
 # ============ Block Endpoints ============
 
 @app.get("/api/documents/{doc_id}/blocks", response_model=List[schemas.BlockResponse])
-def get_blocks(doc_id: str, db: Session = Depends(get_db)):
+def get_blocks(
+    doc_id: str, 
+    start_page: int = None,
+    end_page: int = None,
+    db: Session = Depends(get_db)
+):
     """
-    Get all blocks for a document
+    Get blocks for a document, optionally filtered by page range (inclusive)
     """
     # Verify document exists
     doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    blocks = db.query(models.Block).filter(
-        models.Block.doc_id == doc_id
-    ).order_by(
+    query = db.query(models.Block).filter(models.Block.doc_id == doc_id)
+    
+    if start_page is not None:
+        query = query.filter(models.Block.page_number >= start_page)
+    
+    if end_page is not None:
+        query = query.filter(models.Block.page_number <= end_page)
+        
+    blocks = query.order_by(
         models.Block.page_number,
         models.Block.block_order
     ).all()

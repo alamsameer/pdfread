@@ -12,6 +12,7 @@ interface DocumentState {
   // Actions
   setDocument: (doc: Document) => void;
   setPage: (pageNum: number, blocks: Block[]) => void;
+  setPages: (pages: Map<number, Block[]>) => void;
   getPage: (pageNum: number) => Block[] | undefined;
   clearDocument: () => void;
   setLoading: (loading: boolean) => void;
@@ -31,6 +32,15 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       const newPages = new Map(state.pages);
       newPages.set(pageNum, blocks);
       return { pages: newPages };
+    }),
+
+  setPages: (newPagesMap: Map<number, Block[]>) =>
+    set((state) => {
+      const updatedPages = new Map(state.pages);
+      newPagesMap.forEach((blocks: Block[], pageNum: number) => {
+        updatedPages.set(pageNum, blocks);
+      });
+      return { pages: updatedPages };
     }),
 
   getPage: (pageNum) => get().pages.get(pageNum),

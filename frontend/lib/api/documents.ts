@@ -27,6 +27,20 @@ export const documentsAPI = {
     return response.data;
   },
 
+  // Get blocks for a range of pages
+  getBlocksRange: async (docId: string, startPage: number, endPage: number): Promise<Block[]> => {
+    const response = await apiClient.get<Block[]>(
+      `/api/documents/${docId}/blocks`,
+      {
+        params: {
+          start_page: startPage,
+          end_page: endPage,
+        },
+      }
+    );
+    return response.data;
+  },
+
   // Delete document
   deleteDocument: async (docId: string): Promise<void> => {
     await apiClient.delete(`/api/documents/${docId}`);
